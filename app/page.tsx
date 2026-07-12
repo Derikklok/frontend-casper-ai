@@ -51,7 +51,7 @@ export default function CasperLandingPage() {
         </nav>
         <div className="flex items-center gap-4">
           <Button variant="outline" className="hidden sm:inline-flex">
-            Login
+            <Link href="/auth/login">Login</Link>
           </Button>
           <Button>Start Session</Button>
         </div>
@@ -65,7 +65,7 @@ export default function CasperLandingPage() {
             <div className="flex flex-1 flex-col items-start gap-6 lg:gap-8">
               <Badge
                 variant="outline"
-                className="font-quicksand rounded-full border-primary/50 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-[0.28em] text-primary uppercase"
+                className="font-quicksand rounded-full border-primary/50 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-[0.28em] text-amber-400 uppercase"
               >
                 <RadioTower className="mr-2 inline-block h-3 w-3" />
                 Live Pit-Wall Integration
@@ -110,6 +110,7 @@ export default function CasperLandingPage() {
                   fill
                   className="object-cover"
                   priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                 />
                 {/* Floating Tech Badges for effect */}
                 <div className="absolute top-6 right-6 flex flex-col gap-3">
@@ -183,6 +184,7 @@ export default function CasperLandingPage() {
                   alt="CASPER giving a thumbs up after strategy approval"
                   fill
                   className="object-cover object-center"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                 />
                 {/* HITL Overlay UI Mockup */}
                 <div className="absolute bottom-6 left-1/2 w-[90%] -translate-x-1/2 rounded-xl border border-primary/30 bg-background/95 p-4 shadow-lg backdrop-blur-md">
