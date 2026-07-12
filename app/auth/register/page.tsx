@@ -30,7 +30,7 @@ export default function RegisterPage() {
           ABORT PROTOCOL
         </Link>
 
-        <div className="mx-auto mt-12 flex w-full max-w-[450px] flex-col justify-center space-y-8 lg:mt-0">
+        <div className="mx-auto mt-12 flex w-full max-w-112.5 flex-col justify-center space-y-8 lg:mt-0">
           {/* Header Branding */}
           <div className="flex flex-col space-y-3">
             <div className="mb-2 flex items-center gap-2">
@@ -174,7 +174,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right Area - Dynamic Motion Image */}
-      <div className="relative hidden min-h-[400px] w-full border-l border-border/30 bg-zinc-950 lg:block">
+      <div className="relative hidden min-h-100 w-full border-l border-border/30 bg-zinc-950 lg:block">
         <Image
           src="/max-1.jpg"
           alt="High-speed telemetry processing visualization"
@@ -188,7 +188,7 @@ export default function RegisterPage() {
         <div className="absolute inset-0 bg-primary/5 mix-blend-color-burn"></div>
 
         {/* Scanner line effect via CSS */}
-        <div className="absolute top-0 left-0 h-[2px] w-full animate-in bg-primary/40 shadow-[0_0_15px_2px_rgba(var(--color-primary-rgb),0.8)] duration-1000 ease-linear repeat-infinite fade-in slide-in-from-top-full"></div>
+        <div className="absolute top-0 left-0 h-0.5 w-full animate-in bg-primary/40 shadow-[0_0_15px_2px_rgba(var(--color-primary-rgb),0.8)] duration-1000 ease-linear repeat-infinite fade-in slide-in-from-top-full"></div>
 
         {/* Telemetry HUD Elements Over Image */}
         <div className="pointer-events-none absolute top-8 right-8 flex flex-col items-end gap-3">
