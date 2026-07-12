@@ -155,7 +155,7 @@ export default function LoginPage() {
                 </div>
 
                 <Button className="mt-2 h-12 w-full font-heading text-base font-semibold tracking-wide shadow-lg shadow-primary/20 transition-transform duration-300 hover:scale-[1.02]">
-                  Initiate Handshake <Zap className="ml-2 h-4 w-4" />
+                   <Link href="/dashboard">Initiate Handshake <Zap className="ml-2 h-4 w-4" /></Link>
                 </Button>
               </div>
             </form>
