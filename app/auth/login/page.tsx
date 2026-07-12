@@ -16,7 +16,7 @@ export default function LoginPage() {
           src="/f1-car-neon.jpg"
           alt="CASPER AI F1 Vehicle Integration"
           fill
-          sizes="100vw"
+          sizes="(max-width: 1024px) 0vw, 100vw"
           className="object-cover opacity-80 mix-blend-lighten"
           priority
         />

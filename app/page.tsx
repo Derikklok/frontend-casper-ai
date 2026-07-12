@@ -53,7 +53,7 @@ export default function CasperLandingPage() {
           <Button variant="outline" className="hidden sm:inline-flex">
             <Link href="/auth/login">Login</Link>
           </Button>
-          <Button>Start Session</Button>
+          <Button><Link href="/auth/register">Start Session</Link></Button>
         </div>
       </header>
 
@@ -65,7 +65,7 @@ export default function CasperLandingPage() {
             <div className="flex flex-1 flex-col items-start gap-6 lg:gap-8">
               <Badge
                 variant="outline"
-                className="font-quicksand rounded-full border-primary/50 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-[0.28em] text-amber-400 uppercase"
+                className="font-quicksand rounded-full border-primary/50 bg-primary/10 px-4 py-1.5 text-xs font-semibold tracking-[0.28em] text-primary uppercase"
               >
                 <RadioTower className="mr-2 inline-block h-3 w-3" />
                 Live Pit-Wall Integration
