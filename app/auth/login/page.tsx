@@ -10,37 +10,50 @@ import Link from "next/link"
 export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen w-full lg:grid lg:grid-cols-2">
-      {/* Left Area - F1 Neon Image Showcase (Hidden on smaller screens) */}
-      <div className="relative hidden bg-zinc-900 lg:block">
+      {/* Left Area - F1 Hero Image Showcase */}
+      <div className="relative hidden bg-background lg:block overflow-hidden">
+        
+        {/* Adjusted to center-left focus to reduce awkward zooming */}
         <Image
-          src="/f1-hero.jpg"
+          src="/lewis-ham-1.jpg"
           alt="CASPER AI F1 Vehicle Integration"
           fill
           sizes="(max-width: 1024px) 0vw, 100vw"
-          className="object-cover opacity-80 mix-blend-lighten"
+          className="object-cover object-[20%_center] opacity-85"
           priority
         />
-        {/* Subtle Gradients to blend the image into the edges */}
-        <div className="absolute inset-0 bg-linear-to-r from-background/10 to-background dark:from-background/10 dark:to-background"></div>
-        <div className="absolute inset-0 bg-linear-to-t from-background/60 via-transparent to-transparent"></div>
+        
+        {/* 1. Global blend to the right form area */}
+        <div className="absolute inset-0 bg-linear-to-r from-transparent via-transparent to-background"></div>
+        
+        {/* 2. Strong Text Anchor Gradient: Darkens specifically the bottom left corner for text readability */}
+        <div className="absolute inset-0 bg-linear-to-t from-background/90 via-background/20 to-transparent"></div>
+        <div className="absolute inset-0 bg-linear-to-r from-background/90 via-transparent to-transparent"></div>
 
         {/* Floating overlay data/decorations on the image */}
-        <div className="absolute bottom-12 left-12 flex flex-col items-start gap-4 text-white">
-          <Badge
-            variant="outline"
-            className="font-quicksand border-white/20 bg-black/40 px-4 py-1.5 text-xs font-semibold tracking-[0.2em] text-white/90 uppercase backdrop-blur-md"
-          >
-            <ShieldCheck className="mr-2 inline-block h-3 w-3 text-green-400" />
-            Level 4 Clearance Required
-          </Badge>
-          <h2 className="max-w-md font-heading text-4xl leading-[1.1] font-bold text-white shadow-black drop-shadow-xl">
-            Live Telemetry Engine
-            <span className="mt-1 block text-primary/90">Standby Mode.</span>
-          </h2>
-          <p className="font-google-flex mt-2 max-w-sm text-sm leading-relaxed font-light text-white/70">
-            Secure connection protocols engaged. Waiting for active Race
-            Engineer authentication to initiate dynamic strategy matrix.
-          </p>
+        <div className="absolute bottom-16 left-10 flex max-w-lg flex-col items-start text-white">
+          
+          {/* Subtle red accent line groups the text together visually */}
+          <div className="border-l-4 border-primary pl-6 py-1">
+            <Badge
+              variant="outline"
+              className="font-quicksand mb-4 border-white/10 bg-white/5 px-4 py-1.5 text-xs font-semibold tracking-[0.2em] text-white/90 uppercase shadow-sm backdrop-blur-md"
+            >
+              <ShieldCheck className="mr-2 inline-block h-3.5 w-3.5 text-green-400" />
+              Level 4 Clearance Required
+            </Badge>
+            
+            <h2 className="font-heading text-4xl leading-[1.15] font-extrabold tracking-tight text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">
+              Live Telemetry Engine<br/>
+              <span className="mt-1 block text-primary">Standby Mode.</span>
+            </h2>
+            
+            <p className="font-google-flex mt-4 max-w-sm text-sm font-medium leading-relaxed text-zinc-300 drop-shadow-md">
+              Secure connection protocols engaged. Waiting for active Race
+              Engineer authentication to initiate dynamic strategy matrix.
+            </p>
+          </div>
+
         </div>
       </div>
 
@@ -107,7 +120,7 @@ export default function LoginPage() {
                       type="text"
                       autoCapitalize="characters"
                       autoCorrect="off"
-                      className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase"
+                      className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase focus-visible:border-primary/50"
                     />
                     <Lock className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                   </div>
@@ -134,7 +147,7 @@ export default function LoginPage() {
                       id="password"
                       placeholder="••••••••••••"
                       type="password"
-                      className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground"
+                      className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground focus-visible:border-primary/50"
                     />
                     <ShieldCheck className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
                   </div>
@@ -154,7 +167,14 @@ export default function LoginPage() {
                   </label>
                 </div>
 
-                <Link href="/dashboard" className={buttonVariants({ className: "mt-2 h-12 w-full font-heading text-base font-semibold tracking-wide shadow-lg shadow-primary/20 transition-transform duration-300 hover:scale-[1.02]" })}>Initiate Handshake <Zap className="ml-2 h-4 w-4" /></Link>
+                <Link 
+                  href="/dashboard" 
+                  className={buttonVariants({ 
+                    className: "mt-2 h-12 w-full font-heading text-base font-semibold tracking-wide shadow-[0_0_20px_-5px_rgba(var(--color-primary-rgb),0.5)] transition-transform duration-300 hover:scale-[1.02]" 
+                  })}
+                >
+                  Initiate Handshake <Zap className="ml-2 h-4 w-4" />
+                </Link>
               </div>
             </form>
 
@@ -181,12 +201,16 @@ export default function LoginPage() {
           </div>
 
           {/* Form Footer */}
-          <div className="mt-8 text-center font-mono text-xs text-muted-foreground/60 sm:text-left">
-            Server Status:{" "}
-            <span className="mr-2 animate-pulse font-semibold text-green-500">
+          <div className="mt-8 flex items-center gap-2 text-center font-mono text-xs text-muted-foreground/60 sm:text-left">
+            <span>Server Status:</span>
+            <span className="flex items-center gap-1 font-semibold text-green-500">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+              </span>
               ONLINE
             </span>
-            v{new Date().getFullYear()}.4.2 (LKA Region)
+            <span className="ml-2">v{new Date().getFullYear()}.4.2 (LKA Region)</span>
           </div>
         </div>
       </div>
