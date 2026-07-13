@@ -13,7 +13,7 @@ export default function LoginPage() {
       {/* Left Area - F1 Neon Image Showcase (Hidden on smaller screens) */}
       <div className="relative hidden bg-zinc-900 lg:block">
         <Image
-          src="/f1-car-neon.jpg"
+          src="/f1-hero.jpg"
           alt="CASPER AI F1 Vehicle Integration"
           fill
           sizes="(max-width: 1024px) 0vw, 100vw"
