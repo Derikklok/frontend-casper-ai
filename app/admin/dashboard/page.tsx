@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   AlertTriangle, BrainCircuit, Car, CheckCircle2,
-  Flag, Gauge, LayoutDashboard, LogOut, Map, Package, Settings, 
+  Flag, Gauge, LayoutDashboard, LogOut, Map, Package, RadioTower, Settings, 
   ThermometerSun, Timer, User, Zap, Check, X
 } from "lucide-react"
 import { 
@@ -347,6 +347,7 @@ function BatteryIcon({ level }: { level: number }) {
 }
 
 function LiveDataWidgets() {
+  const router = useRouter()
   const activeSeqQuery = useGetActiveSequence()
   const driversQuery = useGetDrivers()
   const circuitsQuery = useGetCircuits()
@@ -364,7 +365,7 @@ function LiveDataWidgets() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <Card className="border-primary/30 bg-primary/5 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-primary to-transparent" />
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-primary to-transparent" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
@@ -413,6 +414,13 @@ function LiveDataWidgets() {
                   ))}
                 </div>
               ) : null}
+              <Button
+                onClick={() => router.push("/admin/dashboard/pit-wall")}
+                className="w-full h-10 bg-primary hover:bg-primary/90 font-heading text-xs tracking-widest uppercase shadow-[0_0_20px_-5px_rgba(var(--color-primary-rgb),0.6)] gap-2"
+              >
+                <RadioTower className="h-3.5 w-3.5" />
+                Initiate Pit Wall
+              </Button>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
@@ -424,7 +432,7 @@ function LiveDataWidgets() {
       </Card>
 
       <Card className="border-border/60 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-blue-500 to-transparent" />
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-blue-500 to-transparent" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
@@ -444,7 +452,7 @@ function LiveDataWidgets() {
               <p className="text-xs text-muted-foreground">No drivers registered yet.</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
               {drivers.map((driver) => (
                 <div key={driver.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
                   <div className="flex items-center gap-3">
@@ -465,7 +473,7 @@ function LiveDataWidgets() {
       </Card>
 
       <Card className="border-border/60 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-amber-500 to-transparent" />
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-amber-500 to-transparent" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
@@ -485,7 +493,7 @@ function LiveDataWidgets() {
               <p className="text-xs text-muted-foreground">No circuits registered yet.</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
               {circuits.map((circuit) => (
                 <div key={circuit.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
                   <div>
