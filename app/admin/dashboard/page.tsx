@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
-  Activity, AlertTriangle, BrainCircuit, Car, Cpu, 
+  AlertTriangle, BrainCircuit, Car, 
   Flag, Gauge, LayoutDashboard, LogOut, Map, Package, Settings, 
   ThermometerSun, Timer, Zap, Check, X
 } from "lucide-react"
@@ -44,7 +44,7 @@ export default function EngineerDashboard() {
 
   const navItems = [
     { name: "Dashboard", icon: LayoutDashboard },
-    { name: "Telemetry", icon: Activity },
+    { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
     { name: "Strategy Matrix", icon: BrainCircuit },
     { name: "Weather Radar", icon: Map },
     { name: "Car Vitals", icon: Car },
