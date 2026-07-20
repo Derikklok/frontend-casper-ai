@@ -55,8 +55,8 @@ export default function LoginPage() {
               Cookies.set("user_details", JSON.stringify(user), cookieOptions)
             }
 
-            // 5. Redirect to Dashboard
-            router.push("/dashboard")
+            // 5. Redirect to Admin Dashboard
+            router.push("/admin/dashboard")
           } else {
             setLoginError("Invalid response from server. No token received.")
           }
