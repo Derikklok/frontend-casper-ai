@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
-  ArrowLeft, Building2, Copy, Loader2,
+  ArrowLeft, Building2, Copy, ImageOff, Loader2,
   MapPin, Plus, Radio, Users
 } from "lucide-react"
 import {
@@ -119,10 +119,27 @@ export default function TeamSetup({ onBack }: { onBack: () => void }) {
                   ENROLLED
                 </Badge>
               </div>
-              <CardTitle className="text-2xl mt-2">{myTeam.name}</CardTitle>
-              {myTeam.description && (
-                <CardDescription className="font-google-flex">{myTeam.description}</CardDescription>
-              )}
+              <div className="mt-3 flex items-center gap-4">
+                {/* Team Logo */}
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border/50 bg-muted/40 flex items-center justify-center">
+                  {myTeam.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={myTeam.logoUrl}
+                      alt={`${myTeam.name} logo`}
+                      className="h-full w-full object-contain p-1"
+                    />
+                  ) : (
+                    <ImageOff className="h-6 w-6 text-muted-foreground/40" />
+                  )}
+                </div>
+                <div>
+                  <CardTitle className="text-2xl">{myTeam.name}</CardTitle>
+                  {myTeam.description && (
+                    <CardDescription className="font-google-flex mt-1">{myTeam.description}</CardDescription>
+                  )}
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 font-mono text-sm mt-2">

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   Activity, AlertTriangle, BrainCircuit, Car, Cpu, 
-  Flag, Gauge, LayoutDashboard, LogOut, Map, Settings, 
+  Flag, Gauge, LayoutDashboard, LogOut, Map, Package, Settings, 
   ThermometerSun, Timer, Zap, Check, X
 } from "lucide-react"
 import { 
@@ -48,7 +48,7 @@ export default function EngineerDashboard() {
     { name: "Strategy Matrix", icon: BrainCircuit },
     { name: "Weather Radar", icon: Map },
     { name: "Car Vitals", icon: Car },
-    { name: "HITL Logs", icon: Cpu },
+    { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },
     { name: "Settings", icon: Settings },
   ]
 
@@ -70,7 +70,7 @@ export default function EngineerDashboard() {
             {navItems.map((item) => (
               <button
                 key={item.name}
-                onClick={() => setNavActive(item.name)}
+                onClick={() => "href" in item && item.href ? router.push(item.href) : setNavActive(item.name)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
                   navActive === item.name 
                     ? "bg-primary/10 text-primary" 
