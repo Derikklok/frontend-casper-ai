@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Cookies from "js-cookie"
+import TeamSetup from "@/components/team-management/teamSetup"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -109,7 +110,11 @@ export default function EngineerDashboard() {
         </div>
       </header>
 
+      {/* Settings View */}
+      {navActive === "Settings" && <TeamSetup onBack={() => setNavActive("Dashboard")} />}
+
       {/* 2. Top Race Context Bar */}
+      {navActive !== "Settings" && (
       <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border border-b border-border bg-muted/20">
         <ContextStat icon={Flag} label="Race Status" value="GREEN FLAG" valueColor="text-green-500" />
         <ContextStat icon={Timer} label="Current Lap" value="Lap 42 / 72" />
@@ -117,8 +122,10 @@ export default function EngineerDashboard() {
         <ContextStat icon={ThermometerSun} label="Track Temp" value="34.2 °C" />
         <ContextStat icon={AlertTriangle} label="Rain Risk" value="12% (ETA 40m)" />
       </div>
+      )}
 
       {/* Main Dashboard Grid */}
+      {navActive !== "Settings" && (
       <main className="flex-1 p-6 overflow-auto">
         <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-6">
 
@@ -281,6 +288,7 @@ export default function EngineerDashboard() {
 
         </div>
       </main>
+      )}
     </div>
   )
 }
