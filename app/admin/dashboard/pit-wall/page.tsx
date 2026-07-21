@@ -273,7 +273,7 @@ export default function PitWallPage() {
               <Badge className="self-center rounded-sm border border-primary/50 bg-primary/10 px-3 py-1 font-mono text-xs text-primary">SYS_READY</Badge>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+            <section className="grid gap-6 [&>*]:min-w-0 lg:grid-cols-[1.2fr_1fr]">
               <TelemetryDisplay
                 currentLap={currentLap}
                 totalLaps={activeSequence?.defaultLapCount ?? totalLaps}
@@ -283,6 +283,7 @@ export default function PitWallPage() {
                 predictedPaceVector={predictedPaceVector}
               />
               <AiStrategyPanel
+                key={`${effectiveDriver?.id ?? "driver"}-${effectiveCircuit?.id ?? "circuit"}-${activeSequence?.defaultLapCount ?? totalLaps}`}
                 driverId={effectiveDriver?.id}
                 driverName={effectiveDriver?.broadcastName ?? effectiveDriver?.fullName}
                 trackId={effectiveCircuit?.name}

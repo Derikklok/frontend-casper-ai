@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { BrainCircuit, Loader2, Plus, Sparkles, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,7 @@ type Props = { driverId?: string; driverName?: string; trackId?: string; current
 
 const apiUrl = process.env.NEXT_PUBLIC_AI_API_URL ?? "http://localhost:8000"
 const controlClass = "h-10 w-full rounded-md border border-border/50 bg-muted/40 px-3 font-mono text-sm text-foreground transition-colors focus:border-amber-400/70 focus:bg-muted/60 focus:outline-none"
+const toTrackStatus = (status: string) => status === "Safety Car" ? "SC" : status === "VSC" ? "VSC" : "GREEN"
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="block space-y-1.5"><span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</span>{children}</label>
@@ -26,7 +27,7 @@ export default function AiStrategyPanel({ driverId, driverName, trackId, current
   const [totalLaps, setTotalLaps] = useState(initialTotalLaps)
   const [compound, setCompound] = useState<Compound>((initialCompound?.toUpperCase() as Compound) || "MEDIUM")
   const [tyreAge, setTyreAge] = useState(initialTyreAge)
-  const [status, setStatus] = useState("GREEN")
+  const [status, setStatus] = useState(() => toTrackStatus(initialStatus))
   const [temp, setTemp] = useState(initialTemp)
   const [lapTimes, setLapTimes] = useState(initialLapTimes.join(", "))
   const [raceHistory, setRaceHistory] = useState("")
@@ -37,12 +38,6 @@ export default function AiStrategyPanel({ driverId, driverName, trackId, current
   const [briefing, setBriefing] = useState("")
   const [loading, setLoading] = useState<"predict" | "briefing" | null>(null)
   const [error, setError] = useState("")
-
-  useEffect(() => {
-    setCurrentLap(initialLap); setTotalLaps(initialTotalLaps); setTyreAge(initialTyreAge); setTemp(initialTemp); setLapTimes(initialLapTimes.join(", "))
-    if (["SOFT", "MEDIUM", "HARD"].includes(initialCompound?.toUpperCase() ?? "")) setCompound(initialCompound!.toUpperCase() as Compound)
-    setStatus(initialStatus === "Safety Car" ? "SC" : initialStatus === "VSC" ? "VSC" : "GREEN")
-  }, [initialCompound, initialLap, initialLapTimes, initialStatus, initialTemp, initialTotalLaps, initialTyreAge])
 
   const usedCompounds = useMemo(() => Array.from(new Set(["SOFT", ...pitHistory.map((pit) => pit.compound), compound])), [compound, pitHistory])
   const payload = () => {
