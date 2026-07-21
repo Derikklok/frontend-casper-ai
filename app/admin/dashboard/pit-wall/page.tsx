@@ -39,6 +39,8 @@ import {
 } from "recharts"
 
 import TeamSetup from "@/components/team-management/teamSetup"
+import TelemetryDisplay from "@/components/pit-wall/TelemetryDisplay"
+import AiStrategyPanel from "@/components/pit-wall/AiStrategyPanel"
 import { useGetActiveSequence } from "@/api/endpoints/race-sequence-controller/race-sequence-controller"
 import { useGetCircuits, useGetDrivers, useGetCars } from "@/api/endpoints/asset-controller/asset-controller"
 import { Badge } from "@/components/ui/badge"
@@ -60,6 +62,13 @@ const STRATEGY_MODES: StrategyMode[] = ["Management", "Normal", "Push"]
 const TRACK_STATUSES: TrackStatus[] = ["Green Flag", "VSC", "Safety Car"]
 
 const telemetryData = Array.from({ length: 28 }).map((_, index) => ({
+  lap: index + 1,
+  speed: 170 + Math.sin(index / 2) * 24 + (index % 5) * 3,
+  throttle: 55 + Math.cos(index / 3) * 18 + (index % 4) * 2,
+}))
+
+// Mock Live Trace Data
+const liveTelemetryData = Array.from({ length: 28 }).map((_, index) => ({
   lap: index + 1,
   speed: 170 + Math.sin(index / 2) * 24 + (index % 5) * 3,
   throttle: 55 + Math.cos(index / 3) * 18 + (index % 4) * 2,
@@ -110,6 +119,16 @@ export default function PitWallPage() {
   const [decision, setDecision] = useState<StrategyDecision>("Pending")
   const [decisionMessage, setDecisionMessage] = useState("Awaiting engineer review.")
 
+  const [drivingMode, setDrivingMode] = useState("NORMAL")
+  const [currentCompound, setCurrentCompound] = useState("MEDIUM")
+  const [tyreAge, setTyreAge] = useState(15)
+  const [recentLapTimes, setRecentLapTimes] = useState(["80.5", "80.7", "80.9", "81.2", "81.5"])
+  const [raceHistoryLog, setRaceHistoryLog] = useState("")
+
+  // AI Output State
+  const [predictedPaceVector, setPredictedPaceVector] = useState<number[]>([])
+  // const [aiAnalysis, setAiAnalysis] = useState<any>(null) // Will use in Part 2
+  
   const router = useRouter()
 
   const handleExit = () => {
@@ -140,6 +159,12 @@ export default function PitWallPage() {
     () => cars.find((car) => car.id === activeSequence?.carId) ?? cars[0],
     [activeSequence?.carId, cars]
   )
+
+  // const handleExit = () => {
+  //   Cookies.remove("auth_token")
+  //   Cookies.remove("user_details")
+  //   router.push("/auth/login")
+  // }
 
   const navItems: { name: NavName; icon: ElementType; href?: string }[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
@@ -204,20 +229,16 @@ export default function PitWallPage() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-xs font-mono">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted/50 border border-border">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-black/60 border border-border/50 shadow-inner">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
               </span>
-              PIT WALL: LIVE
-            </div>
-            <div className="px-3 py-1.5 rounded bg-muted/50 border border-border text-muted-foreground">
-              S: {session} | ST: {strategyMode}
+              SOPHIE V6: ONLINE
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExit} className="font-quicksand gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive">
-            <LogOut className="h-3.5 w-3.5" />
-            Exit
+          <Button variant="outline" size="sm" onClick={handleExit} className="font-quicksand gap-2 border-destructive/40 text-destructive bg-destructive/10 hover:bg-destructive/20 hover:text-destructive">
+            <LogOut className="h-3.5 w-3.5" /> Exit
           </Button>
         </div>
       </header>
@@ -225,72 +246,60 @@ export default function PitWallPage() {
       {navActive === "Settings" ? (
         <TeamSetup onBack={() => setNavActive("Pit Wall")} />
       ) : (
-        <main className="relative flex-1 overflow-auto bg-linear-to-br from-background via-background to-primary/5">
+        <main className="pit-wall-shell relative flex-1 overflow-auto">
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute left-8 top-8 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
-            <div className="absolute right-8 top-24 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
-            <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-amber-500/10 blur-3xl" />
+            <div className="absolute left-1/4 top-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[100px]" />
+            <div className="absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-red-500/5 blur-[100px]" />
           </div>
 
           <div className="relative mx-auto max-w-[1600px] space-y-6 p-6">
-            <section className="grid gap-4 rounded-2xl border border-border/60 bg-linear-to-r from-primary/15 via-background to-cyan-500/10 p-6 shadow-[0_20px_80px_-40px_rgba(0,0,0,0.6)] lg:grid-cols-[1.35fr_0.65fr]">
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="rounded-full border border-primary/30 bg-primary/10 text-primary">Pit Wall Dashboard</Badge>
-                  <Badge variant="outline" className={cn("rounded-full", getStatusTone(trackStatus))}>
-                    {trackStatus}
-                  </Badge>
-                  <Badge variant="outline" className="rounded-full border-cyan-500/30 bg-cyan-500/10 text-cyan-200">
-                    {session}
-                  </Badge>
-                </div>
-                <div className="space-y-2">
-                  <h1 className="font-heading text-4xl font-bold uppercase tracking-tight sm:text-5xl">
-                    Manage pit stop operations and real-time race communication
-                  </h1>
-                  <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-                    Each engineer controls a driver-specific strategy lane, while the chief engineer can monitor both sides and focus the call when the race state changes.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button className="gap-2 bg-linear-to-r from-primary to-cyan-500 hover:from-primary/90 hover:to-cyan-500/90 shadow-lg shadow-primary/20">
-                    <Sparkles className="h-4 w-4" />
-                    Load AI Strategy
-                  </Button>
-                  <Button variant="outline" className="gap-2 border-primary/30 hover:bg-primary/10">
-                    <RadioTower className="h-4 w-4" />
-                    Live Comms
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
-                    onClick={() => router.push("/admin/dashboard/race-sequence")}
-                  >
-                    <Flag className="h-4 w-4" />
-                    Back to Race Seq
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
+            <section className="grid gap-4 rounded-xl border border-border/40 bg-black/60 p-4 shadow-inner lg:grid-cols-[1fr_auto]">
+              <div className="flex flex-wrap items-center gap-6">
                 {[
-                  { label: "Active Driver", value: effectiveDriver?.broadcastName ?? effectiveDriver?.fullName ?? "Unassigned", icon: Users },
-                  { label: "Circuit", value: effectiveCircuit?.name ?? "Unknown circuit", icon: Map },
-                  { label: "Car", value: effectiveCar?.name ?? "Unknown car", icon: Car },
-                  { label: "Fuel Load", value: `${fuelLoad}%`, icon: Fuel },
-                ].map((stat) => (
-                  <div key={stat.label} className="rounded-xl border border-border/60 bg-background/70 p-4 backdrop-blur-sm">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                      <stat.icon className="h-4 w-4 text-primary" />
-                      {stat.label}
+                  { label: "Active Pilot", value: effectiveDriver?.broadcastName ?? effectiveDriver?.fullName ?? "Unassigned", icon: Users, tone: "text-primary" },
+                  { label: "Circuit", value: effectiveCircuit?.name ?? "Unknown circuit", icon: Map, tone: "text-amber-500" },
+                  { label: "Chassis", value: effectiveCar?.name ?? "Unknown car", icon: Car, tone: "text-cyan-500" },
+                  { label: "Fuel Load", value: `${fuelLoad} KG`, icon: Fuel, tone: "text-green-500" },
+                ].map((stat, index) => (
+                  <div key={stat.label} className="flex items-center gap-6">
+                    {index > 0 && <div className="hidden h-8 w-px bg-border/40 md:block" />}
+                    <div className="flex flex-col">
+                      <span className="font-quicksand text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{stat.label}</span>
+                      <span className="flex items-center gap-2 font-mono text-lg font-bold text-foreground"><stat.icon className={`h-4 w-4 ${stat.tone}`} /> {stat.value}</span>
                     </div>
-                    <p className="mt-3 font-mono text-lg font-semibold text-foreground">{stat.value}</p>
                   </div>
                 ))}
               </div>
+              <Badge className="self-center rounded-sm border border-primary/50 bg-primary/10 px-3 py-1 font-mono text-xs text-primary">SYS_READY</Badge>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr_0.95fr]">
+            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+              <TelemetryDisplay
+                currentLap={currentLap}
+                totalLaps={activeSequence?.defaultLapCount ?? totalLaps}
+                trackTemp={trackTemp}
+                recentLapTimes={recentLapTimes}
+                liveTelemetryData={liveTelemetryData}
+                predictedPaceVector={predictedPaceVector}
+              />
+              <AiStrategyPanel
+                driverId={effectiveDriver?.id}
+                driverName={effectiveDriver?.broadcastName ?? effectiveDriver?.fullName}
+                trackId={effectiveCircuit?.name}
+                currentLap={currentLap}
+                totalLaps={activeSequence?.defaultLapCount ?? totalLaps}
+                currentCompound={activeSequence?.selectedCompounds?.[0] ?? currentCompound}
+                tyreAge={tyreAge}
+                trackStatus={trackStatus}
+                trackTemp={trackTemp}
+                fuelLoad={fuelLoad}
+                recentLapTimes={recentLapTimes}
+                predictedPaceVector={predictedPaceVector}
+                onPrediction={(result) => setPredictedPaceVector(result.predicted_pace_vector ?? [])}
+              />
+            </section>
+
+            {false && <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr_0.95fr]">
               <Card className="border-border/60 bg-card/80">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between gap-3">
@@ -493,7 +502,7 @@ export default function PitWallPage() {
                   </div>
                 </CardContent>
               </Card>
-            </section>
+            </section>}
 
             <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
               <Card className="border-border/60 bg-card/80">
