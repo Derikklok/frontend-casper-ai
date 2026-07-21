@@ -12,7 +12,6 @@ import {
   Clock3,
   Flag,
   Fuel,
-  Gauge,
   LayoutDashboard,
   LogOut,
   Map,
@@ -20,16 +19,12 @@ import {
   RadioTower,
   Settings,
   Sparkles,
-  Timer,
   ThumbsDown,
   ThumbsUp,
   Users,
   Waves,
   Wind,
   Zap,
-  CloudRain,
-  Thermometer,
-  Droplets,
   Wifi,
 } from "lucide-react"
 import {
@@ -61,7 +56,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 
@@ -122,14 +116,6 @@ const pitHistory = [
   },
 ]
 
-const recentLapTimes = [
-  "1:18.423",
-  "1:18.217",
-  "1:18.588",
-  "1:18.092",
-  "1:18.301",
-]
-
 function getStatusTone(status: TrackStatus) {
   switch (status) {
     case "Green Flag":
@@ -162,7 +148,7 @@ function TelemetryItem({
   color?: string
 }) {
   return (
-    <div className="rounded-md border border-border/40 bg-black/50 p-3">
+    <div className="rounded-md border border-white/10 bg-white/3 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <div className="font-quicksand text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
         {label}
       </div>
@@ -190,17 +176,9 @@ export default function PitWallPage() {
     "Awaiting engineer review."
   )
 
-  const [drivingMode, setDrivingMode] = useState("NORMAL")
-  const [currentCompound, setCurrentCompound] = useState("MEDIUM")
-  const [tyreAge, setTyreAge] = useState(15)
-  const [recentLapTimes, setRecentLapTimes] = useState([
-    "80.5",
-    "80.7",
-    "80.9",
-    "81.2",
-    "81.5",
-  ])
-  const [raceHistoryLog, setRaceHistoryLog] = useState("")
+  const currentCompound = "MEDIUM"
+  const tyreAge = 15
+  const recentLapTimes = ["80.5", "80.7", "80.9", "81.2", "81.5"]
 
   // AI Output State
   const [predictedPaceVector, setPredictedPaceVector] = useState<number[]>([])
@@ -218,35 +196,15 @@ export default function PitWallPage() {
   // Mock Live Telemetry Ribbon
   // ------------------------------------------------------------------
 
-  const liveTelemetry = {
-    session: "RACE",
-    lap: 16,
-    position: "P2",
-    speed: 286,
-    rpm: 11240,
-    gear: 7,
-    drs: "OPEN",
-    ers: 74,
-    fuel: 43,
-    compound: "SOFT",
-    tyreAge: 15,
-    trackTemp: 34,
-    airTemp: 26,
-    humidity: 61,
-    wind: "12 km/h",
-    weather: "CLEAR",
-    lastLap: "1:28.441",
-  }
-
   const activeSequenceQuery = useGetActiveSequence()
   const driversQuery = useGetDrivers()
   const circuitsQuery = useGetCircuits()
   const carsQuery = useGetCars()
 
   const activeSequence = activeSequenceQuery.data?.result
-  const drivers = driversQuery.data?.result ?? []
-  const circuits = circuitsQuery.data?.result ?? []
-  const cars = carsQuery.data?.result ?? []
+  const drivers = useMemo(() => driversQuery.data?.result ?? [], [driversQuery.data?.result])
+  const circuits = useMemo(() => circuitsQuery.data?.result ?? [], [circuitsQuery.data?.result])
+  const cars = useMemo(() => carsQuery.data?.result ?? [], [carsQuery.data?.result])
 
   const effectiveDriver = useMemo(
     () =>
@@ -357,7 +315,7 @@ export default function PitWallPage() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 font-mono text-xs">
-            <div className="flex items-center gap-1.5 rounded-sm border border-border/50 bg-black/60 px-3 py-1.5 shadow-inner">
+            <div className="flex items-center gap-1.5 rounded-sm border border-white/10 bg-slate-900/70 px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
@@ -386,7 +344,7 @@ export default function PitWallPage() {
           </div>
 
           <div className="relative mx-auto max-w-[1600px] space-y-6 p-6">
-            <section className="rounded-xl border border-border/40 bg-black/70 p-4 shadow-inner">
+            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_24px_90px_-46px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wifi className="h-4 w-4 animate-pulse text-green-500" />
@@ -458,7 +416,7 @@ export default function PitWallPage() {
                 <TelemetryItem label="LAST LAP" value="1:28.441" />
               </div>
             </section>
-            <section className="grid gap-4 rounded-xl border border-border/40 bg-black/60 p-4 shadow-inner lg:grid-cols-[1fr_auto]">
+            <section className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4 shadow-[0_20px_70px_-45px_rgba(0,0,0,0.8)] ring-1 ring-white/5 lg:grid-cols-[1fr_auto]">
               <div className="flex flex-wrap items-center gap-6">
                 {[
                   {
@@ -510,7 +468,7 @@ export default function PitWallPage() {
               </Badge>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr] [&>*]:min-w-0">
+            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr] *:min-w-0">
               <TelemetryDisplay
                 currentLap={currentLap}
                 totalLaps={activeSequence?.defaultLapCount ?? totalLaps}

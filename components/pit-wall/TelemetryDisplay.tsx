@@ -50,8 +50,8 @@ export default function TelemetryDisplay({
   }))
 
   return (
-    <Card className="flex h-full min-w-0 flex-col border-border/50 bg-black/40 shadow-2xl backdrop-blur-md">
-      <CardHeader className="border-b border-border/30 bg-muted/10 pb-3">
+    <Card className="flex h-full min-w-0 flex-col border-white/10 bg-slate-950/75 shadow-[0_24px_80px_-45px_rgba(0,0,0,0.85)] backdrop-blur-xl ring-1 ring-white/5">
+      <CardHeader className="border-b border-white/10 bg-white/[0.02] pb-3">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 font-heading text-lg tracking-widest uppercase">
             {viewMode === "LIVE" ? (
@@ -67,7 +67,7 @@ export default function TelemetryDisplay({
           </CardTitle>
 
           {/* View Toggle */}
-          <div className="flex items-center gap-2 rounded-md border border-border/40 bg-black/50 p-1">
+          <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] p-1">
             <button
               onClick={() => setViewMode("LIVE")}
               className={cn(
@@ -96,7 +96,7 @@ export default function TelemetryDisplay({
 
       <CardContent className="flex min-w-0 flex-1 flex-col gap-4 pt-6">
         {/* Main Chart Area */}
-        <div className="relative h-80 min-h-62.5 min-w-0 overflow-hidden rounded-md border border-border/40 bg-black/60 p-2 sm:h-90">
+        <div className="relative h-80 min-h-62.5 min-w-0 overflow-hidden rounded-md border border-white/10 bg-slate-900/60 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:h-90">
           {viewMode === "LIVE" && (
             <div className="absolute top-2 right-4 z-10 flex items-center gap-2">
               <Badge
@@ -250,7 +250,7 @@ export default function TelemetryDisplay({
 
           {/* Empty state for AI chart */}
           {viewMode === "AI_PROJECTION" && predictedPaceVector.length === 0 && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/65 backdrop-blur-sm">
               <span className="rounded-sm border border-red-500/30 bg-red-500/10 px-4 py-2 font-mono text-xs tracking-widest text-red-500/80 uppercase">
                 [ AWAITING_AI_SIMULATION_DATA ]
               </span>
@@ -260,7 +260,7 @@ export default function TelemetryDisplay({
 
         {/* Bottom Widgets */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <div className="col-span-1 rounded-md border border-border/40 bg-black/50 p-3 shadow-inner">
+          <div className="col-span-1 rounded-md border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="font-quicksand flex items-center gap-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
               <Clock3 className="h-3 w-3 text-primary" /> Curr Lap
             </div>
@@ -274,7 +274,7 @@ export default function TelemetryDisplay({
             </div>
           </div>
 
-          <div className="col-span-1 rounded-md border border-border/40 bg-black/50 p-3 shadow-inner">
+          <div className="col-span-1 rounded-md border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <div className="font-quicksand flex items-center gap-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
               <Wind className="h-3 w-3 text-amber-500" /> Trk Temp
             </div>
@@ -288,7 +288,7 @@ export default function TelemetryDisplay({
             </div>
           </div>
 
-          <div className="col-span-2 rounded-md border border-border/40 bg-black/50 p-3 shadow-inner md:col-span-3">
+          <div className="col-span-2 rounded-md border border-white/10 bg-white/[0.03] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] md:col-span-3">
             <div className="font-quicksand mb-2 flex items-center gap-2 text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
               <Zap className="h-3 w-3 text-primary" /> Last 5 Laps
             </div>
@@ -296,7 +296,7 @@ export default function TelemetryDisplay({
               {recentLapTimes.map((lapTime, index) => (
                 <div
                   key={index}
-                  className="rounded-sm border border-border/30 bg-black/40 px-1 py-1 text-center"
+                  className="rounded-sm border border-white/10 bg-white/[0.03] px-1 py-1 text-center"
                 >
                   <div className="font-mono text-[8px] text-muted-foreground/70 uppercase">
                     L{currentLap - (5 - index)}
