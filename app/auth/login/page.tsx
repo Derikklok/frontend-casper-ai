@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Cookies from 'js-cookie'
 
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -14,7 +14,7 @@ import Image from "next/image"
 import Link from "next/link"
 
 import { useLogin } from "@/api/endpoints/auth-controller/auth-controller"
-import type { ApiResponseAuthResponse } from "@/api/models"
+import type { ApiResponseAuthResponse, AuthResponse } from "@/api/models"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -39,17 +39,21 @@ export default function LoginPage() {
       { data: { username, password } },
       {
         onSuccess: (response) => {
-          // Note: Depending on how your custom axios instance is setup, 
-          // you might need to access response.data.token instead of response.token
-          const token = response.token 
-          const user = response.user
+          const auth = ((response as ApiResponseAuthResponse).result ?? response) as AuthResponse
+          const token = auth.token
+          const user = auth.user
 
           if (token) {
-            // 4. Store details in cookies
-            // If remember me is checked, cookie lasts 1 day. Otherwise, session cookie.
-            const cookieOptions = rememberMe ? { expires: 1 } : {}
-            
+            // Replace any expired session with the credentials returned by this login.
+            Cookies.remove("auth_token")
+            Cookies.remove("user_details")
+            Cookies.remove("auth_token", { path: "/" })
+            Cookies.remove("user_details", { path: "/" })
+            localStorage.removeItem("auth-token")
+
+            const cookieOptions = rememberMe ? { expires: 1, path: "/" } : { path: "/" }
             Cookies.set("auth_token", token, cookieOptions)
+            localStorage.setItem("auth-token", token)
             
             if (user) {
               Cookies.set("user_details", JSON.stringify(user), cookieOptions)

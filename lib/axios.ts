@@ -8,19 +8,16 @@ export const axiosAppInstance = Axios.create({
 
 // Request Interceptor: Automatically inject auth tokens
 axiosAppInstance.interceptors.request.use((config) => {
+  const isAuthenticationRequest = config.url?.includes("/auth/")
   const token =
     typeof window !== "undefined" ? localStorage.getItem("auth-token") : null
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (token && !isAuthenticationRequest) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
 // Response Interceptor: Combine your token saving and error handling
 axiosAppInstance.interceptors.response.use(
   (response) => {
-    // Save token upon successful login
-    if (response.config.url?.includes("/login") && response.data.token) {
-      localStorage.setItem("auth-token", response.data.token)
-    }
     return response
   },
   (error) => {
