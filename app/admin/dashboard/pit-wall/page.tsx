@@ -131,7 +131,7 @@ function getStatusTone(status: TrackStatus) {
 function getModeTone(mode: StrategyMode) {
   switch (mode) {
     case "Management":
-      return "from-blue-500/15 via-cyan-500/10 to-transparent text-cyan-200 border-cyan-500/30"
+      return "bg-cyan-500/10 text-cyan-200 border-cyan-500/30"
     case "Normal":
       return "from-primary/15 via-primary/10 to-transparent text-primary border-primary/30"
     case "Push":
@@ -149,7 +149,7 @@ function TelemetryItem({
   color?: string
 }) {
   return (
-    <div className="rounded-md border border-white/10 bg-white/3 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+    <div className="rounded-md border border-white/10 bg-white/3 p-3">
       <div className="font-quicksand text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
         {label}
       </div>
@@ -282,7 +282,7 @@ export default function PitWallPage() {
 
   return (
     <div className="flex min-h-screen flex-col overflow-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background/95 px-6 py-3 backdrop-blur-md">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background px-6 py-3">
         <div className="flex items-center gap-6">
           <button
             onClick={() => router.push("/admin/dashboard")}
@@ -316,7 +316,7 @@ export default function PitWallPage() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 font-mono text-xs">
-            <div className="flex items-center gap-1.5 rounded-sm border border-white/10 bg-slate-900/70 px-3 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <div className="flex items-center gap-1.5 rounded-sm border border-white/10 bg-slate-900/70 px-3 py-1.5">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
@@ -340,12 +340,10 @@ export default function PitWallPage() {
       ) : (
         <main className="pit-wall-shell relative flex-1 overflow-auto">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute top-1/4 left-1/4 h-96 w-96 rounded-full bg-primary/5 blur-[100px]" />
-            <div className="absolute right-1/4 bottom-1/4 h-96 w-96 rounded-full bg-red-500/5 blur-[100px]" />
           </div>
 
           <div className="relative mx-auto max-w-[1600px] space-y-6 p-6">
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 shadow-[0_24px_90px_-46px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+            <section className="rounded-xl border border-border/60 bg-card p-4">
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Wifi className="h-4 w-4 animate-pulse text-green-500" />
@@ -417,7 +415,7 @@ export default function PitWallPage() {
                 <TelemetryItem label="LAST LAP" value="1:28.441" />
               </div>
             </section>
-            <section className="grid gap-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4 shadow-[0_20px_70px_-45px_rgba(0,0,0,0.8)] ring-1 ring-white/5 lg:grid-cols-[1fr_auto]">
+            <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 lg:grid-cols-[1fr_auto]">
               <div className="flex flex-wrap items-center gap-6">
                 {[
                   {
@@ -475,7 +473,7 @@ export default function PitWallPage() {
               defaultLaps={activeSequence?.defaultLapCount ?? totalLaps}
             />
 
-            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr] *:min-w-0">
+            <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] *:min-w-0">
               <TelemetryDisplay
                 currentLap={currentLap}
                 totalLaps={activeSequence?.defaultLapCount ?? totalLaps}
@@ -705,7 +703,7 @@ export default function PitWallPage() {
                             type="button"
                             onClick={() => setStrategyMode(option)}
                             className={cn(
-                              "rounded-xl border bg-linear-to-br px-3 py-2 text-sm font-semibold tracking-widest uppercase transition-all",
+                              "rounded-xl border px-3 py-2 text-sm font-semibold tracking-widest uppercase transition-all",
                               strategyMode === option
                                 ? getModeTone(option)
                                 : "border-border/60 bg-background/50 text-muted-foreground hover:border-primary/30 hover:text-foreground"
@@ -810,7 +808,7 @@ export default function PitWallPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="rounded-xl border border-border/60 bg-linear-to-br from-primary/10 via-cyan-500/10 to-transparent p-4">
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
                       <div className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                         Recommendation
                       </div>
@@ -836,7 +834,7 @@ export default function PitWallPage() {
                     <div className="flex flex-wrap gap-3">
                       <Button
                         onClick={() => handleDecision("Approved")}
-                        className="gap-2 bg-linear-to-r from-emerald-500 to-green-500 shadow-lg shadow-emerald-500/20 hover:from-emerald-500/90 hover:to-green-500/90"
+                        className="gap-2 bg-emerald-600 hover:bg-emerald-500"
                       >
                         <ThumbsUp className="h-4 w-4" />
                         Approve
@@ -974,7 +972,7 @@ export default function PitWallPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-border/60 bg-linear-to-r from-primary/10 via-cyan-500/10 to-amber-500/10 p-4">
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
                     <div className="flex items-center gap-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                       <AlertTriangle className="h-4 w-4 text-primary" />
                       Communication

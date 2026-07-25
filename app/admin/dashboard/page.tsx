@@ -59,7 +59,7 @@ export default function EngineerDashboard() {
     <div className="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
       
       {/* 1. Global Navigation Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background/95 px-6 py-3 backdrop-blur-md">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background px-6 py-3">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2 pr-6 border-r border-border/50">
             <BrainCircuit className="h-5 w-5 text-primary" />
@@ -137,8 +137,8 @@ export default function EngineerDashboard() {
 
           {/* LEFT COLUMN: CASPER AI Strategy Alert (Human in the loop core focus) */}
           <div className="md:col-span-4 flex flex-col gap-6">
-            <Card className="border-primary/50 shadow-[0_0_30px_-10px_rgba(var(--color-primary-rgb),0.2)] bg-linear-to-b from-primary/10 to-transparent relative overflow-hidden">
-               <div className="absolute top-0 left-0 w-full h-1 bg-primary animate-pulse"></div>
+            <Card className="relative overflow-hidden border-primary/50 bg-card">
+               <div className="absolute top-0 left-0 h-1 w-full bg-primary"></div>
                <CardHeader className="pb-2">
                  <div className="flex justify-between items-start">
                    <div className="flex items-center gap-2 text-primary font-bold">
@@ -204,7 +204,7 @@ export default function EngineerDashboard() {
               <CardHeader className="pb-0">
                 <CardTitle className="font-heading text-lg flex items-center justify-between">
                   <span>Speed Trace vs Track Distance</span>
-                  <Badge variant="outline" className="font-mono text-xs text-primary border-primary/50">LIVE <span className="w-2 h-2 rounded-full bg-primary animate-pulse ml-2"></span></Badge>
+                <Badge variant="outline" className="border-primary/50 font-mono text-xs text-primary">LIVE <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span></Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex-1 pt-4">
@@ -272,7 +272,7 @@ export default function EngineerDashboard() {
                    {timingData.map((driver) => (
                      <div 
                       key={driver.p} 
-                      className={`grid grid-cols-[30px_1fr_60px_40px] items-center text-sm font-mono p-3 transition-colors hover:bg-muted/30 ${driver.highlight ? 'bg-primary/10 border-l-2 border-l-primary' : ''}`}
+                      className={`grid grid-cols-[30px_1fr_60px_40px] items-center p-3 font-mono text-sm transition-colors hover:bg-muted/30 ${driver.highlight ? 'border-l-2 border-l-primary bg-primary/10' : ''}`}
                      >
                        <div className={`${driver.highlight ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{driver.p}</div>
                        <div className="font-bold">{driver.name}</div>
@@ -364,8 +364,8 @@ function LiveDataWidgets() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <Card className="border-primary/30 bg-primary/5 relative overflow-hidden">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-primary to-transparent" />
+      <Card className="relative overflow-hidden border-primary/40 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-primary" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
@@ -408,7 +408,7 @@ function LiveDataWidgets() {
                       c === "Soft" ? "bg-red-500/15 border-red-500/40 text-red-400" :
                       c === "Medium" ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-400" :
                       c === "Hard" ? "bg-zinc-400/15 border-zinc-400/40 text-zinc-300" :
-                      c === "Wet" ? "bg-blue-500/15 border-blue-500/40 text-blue-400" :
+                      c === "Wet" ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300" :
                       "bg-green-500/15 border-green-500/40 text-green-400"
                     }`}>{c}</span>
                   ))}
@@ -416,7 +416,7 @@ function LiveDataWidgets() {
               ) : null}
               <Button
                 onClick={() => router.push("/admin/dashboard/pit-wall")}
-                className="w-full h-10 bg-primary hover:bg-primary/90 font-heading text-xs tracking-widest uppercase shadow-[0_0_20px_-5px_rgba(var(--color-primary-rgb),0.6)] gap-2"
+                className="w-full h-10 gap-2 bg-primary font-heading text-xs tracking-widest uppercase hover:bg-primary/90"
               >
                 <RadioTower className="h-3.5 w-3.5" />
                 Initiate Pit Wall
@@ -431,14 +431,14 @@ function LiveDataWidgets() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/60 relative overflow-hidden">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-blue-500 to-transparent" />
+      <Card className="relative overflow-hidden border-border/60 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-muted-foreground" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
-              <User className="h-4 w-4 text-blue-400" /> Driver Roster
+              <User className="h-4 w-4 text-muted-foreground" /> Driver Roster
             </CardTitle>
-            <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-blue-500/30 bg-blue-500/10 text-blue-400">
+              <span className="rounded border border-border/60 bg-muted/20 px-2 py-0.5 font-mono text-[10px] font-bold text-muted-foreground">
               {driversQuery.isLoading ? "..." : `${drivers.length} REG`}
             </span>
           </div>
@@ -472,8 +472,8 @@ function LiveDataWidgets() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/60 relative overflow-hidden">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-linear-to-r from-amber-500 to-transparent" />
+      <Card className="relative overflow-hidden border-border/60 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-amber-500" />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">

@@ -50,7 +50,7 @@ export default function TelemetryDisplay({
   }))
 
   return (
-    <Card className="flex h-full min-w-0 flex-col border-white/10 bg-slate-950/75 shadow-[0_24px_80px_-45px_rgba(0,0,0,0.85)] backdrop-blur-xl ring-1 ring-white/5">
+    <Card className="flex h-full min-w-0 flex-col border-border/60 bg-card">
       <CardHeader className="border-b border-white/10 bg-white/[0.02] pb-3">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 font-heading text-lg tracking-widest uppercase">
@@ -96,7 +96,7 @@ export default function TelemetryDisplay({
 
       <CardContent className="flex min-w-0 flex-1 flex-col gap-4 pt-6">
         {/* Main Chart Area */}
-        <div className="relative h-80 min-h-62.5 min-w-0 overflow-hidden rounded-md border border-white/10 bg-slate-900/60 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] sm:h-90">
+        <div className="relative h-80 min-h-62.5 min-w-0 overflow-hidden rounded-md border border-border/60 bg-background p-2 sm:h-90">
           {viewMode === "LIVE" && (
             <div className="absolute top-2 right-4 z-10 flex items-center gap-2">
               <Badge
@@ -250,7 +250,7 @@ export default function TelemetryDisplay({
 
           {/* Empty state for AI chart */}
           {viewMode === "AI_PROJECTION" && predictedPaceVector.length === 0 && (
-            <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/65 backdrop-blur-sm">
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90">
               <span className="rounded-sm border border-red-500/30 bg-red-500/10 px-4 py-2 font-mono text-xs tracking-widest text-red-500/80 uppercase">
                 [ AWAITING_AI_SIMULATION_DATA ]
               </span>

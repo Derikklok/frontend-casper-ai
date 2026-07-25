@@ -91,15 +91,14 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
         that matches the F1 Pit Wall UI aesthetic without wasting vertical space.
         ========================================================================
       */}
-      <div className="relative overflow-hidden rounded-xl border border-cyan-500/30 bg-slate-950/80 p-3.5 shadow-[0_4px_20px_-10px_rgba(34,211,238,0.25)] backdrop-blur-md transition-all hover:border-cyan-400/50">
+      <div className="relative overflow-hidden rounded-xl border border-border/60 bg-card p-3.5 transition-all hover:border-primary/50">
         {/* Subtle background ambient glow */}
-        <div className="pointer-events-none absolute -left-10 -top-10 h-32 w-32 rounded-full bg-cyan-500/10 blur-2xl" />
-        <div className="pointer-events-none absolute -right-10 -bottom-10 h-32 w-32 rounded-full bg-cyan-500/10 blur-2xl" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/70" />
 
         <div className="relative flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-center">
           {/* Left: Component Title & Status Badge */}
           <div className="flex items-center gap-3.5 min-w-0">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/10 text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-primary">
               <BrainCircuit className="h-5 w-5" />
             </div>
             <div className="min-w-0">
@@ -107,11 +106,11 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
                 <h2 className="font-heading text-sm font-bold tracking-wider text-slate-100 uppercase">
                   Pre-Race Strategy Lab
                 </h2>
-                <Badge variant="outline" className="border-cyan-400/30 bg-cyan-400/10 px-2 py-0 text-[10px] font-mono tracking-widest text-cyan-300">
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 px-2 py-0 font-mono text-[10px] tracking-widest text-primary">
                   SIMULATION
                 </Badge>
               </div>
-              <p className="mt-0.5 truncate font-mono text-xs text-slate-400">
+              <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
                 Generate strategic baselines & pit-window simulations before live calls.
               </p>
             </div>
@@ -131,12 +130,12 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
             <div className="h-6 w-px bg-white/10" />
             <div className="flex flex-col">
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Active Pilot</span>
-              <span className="font-bold text-cyan-300">{driverLabel}</span>
+              <span className="font-bold text-primary">{driverLabel}</span>
             </div>
             <div className="h-6 w-px bg-white/10" />
             <div className="flex flex-col">
               <span className="text-[9px] uppercase tracking-wider text-muted-foreground">Circuit</span>
-              <span className="font-bold text-amber-400">{circuitLabel}</span>
+              <span className="font-bold text-foreground">{circuitLabel}</span>
             </div>
           </div>
 
@@ -150,11 +149,11 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
             render={
               <button
                 type="button"
-                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-400/50 bg-cyan-500/20 px-3 py-2 font-mono text-xs font-semibold text-cyan-200 uppercase shadow-[0_0_15px_rgba(34,211,238,0.15)] transition-all hover:border-cyan-300 hover:bg-cyan-500/30 hover:text-white"
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 font-mono text-xs font-semibold text-primary uppercase transition-all hover:border-primary hover:bg-primary/20 hover:text-foreground"
               />
             }
           >
-              <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
               <span>Launch Strategy Lab</span>
               <ChevronRight className="h-3.5 w-3.5 opacity-70" />
           </DialogTrigger>
@@ -167,14 +166,14 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
         Enhanced dark theme modal dialog layout with clear cyber-motorsport styling
         ========================================================================
       */}
-      <DialogContent className="flex h-[min(88vh,900px)] max-h-[900px] w-[96vw] max-w-[1400px] flex-col overflow-hidden border-cyan-500/30 bg-slate-950 p-0 text-foreground shadow-2xl shadow-cyan-950/40 sm:max-w-[1400px]">
-        <DialogHeader className="border-b border-white/10 bg-gradient-to-r from-cyan-500/10 via-transparent to-transparent px-6 py-4 pr-14">
+      <DialogContent className="flex h-[min(88vh,900px)] max-h-[900px] w-[96vw] max-w-[1400px] flex-col overflow-hidden border-border/60 bg-card p-0 text-foreground sm:max-w-[1400px]">
+        <DialogHeader className="border-b border-border/60 bg-muted/20 px-6 py-4 pr-14">
           <div className="flex items-center gap-2">
             <DialogTitle className="flex items-center gap-2 font-heading text-lg tracking-wide uppercase">
-              <BrainCircuit className="h-5 w-5 text-cyan-400" />
+              <BrainCircuit className="h-5 w-5 text-primary" />
               Pre-Race Strategy Lab
             </DialogTitle>
-            <Badge variant="outline" className="border-cyan-400/30 bg-cyan-400/10 font-mono text-[10px] text-cyan-300">
+            <Badge variant="outline" className="border-primary/30 bg-primary/10 font-mono text-[10px] text-primary">
               ASTRIX STRATEGY ENGINE
             </Badge>
           </div>
@@ -185,9 +184,9 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
 
         <CardContent className="grid min-h-0 flex-1 gap-5 overflow-y-auto overflow-x-hidden p-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:overflow-hidden">
           {/* Sidebar: Simulation Parameters */}
-          <div className="flex flex-col justify-between space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 font-mono">
+          <div className="flex flex-col justify-between space-y-4 rounded-xl border border-border/60 bg-muted/20 p-4 font-mono">
             <div className="space-y-4">
-              <div className="flex items-center gap-2 border-b border-white/10 pb-2 text-xs font-semibold tracking-wider text-cyan-400 uppercase">
+              <div className="flex items-center gap-2 border-b border-border/60 pb-2 text-xs font-semibold tracking-wider text-primary uppercase">
                 <Sliders className="h-3.5 w-3.5" /> Simulation Controls
               </div>
               <div className="space-y-1">
@@ -204,7 +203,7 @@ export default function InitialStartegy({ driver, circuit, defaultLaps = 58 }: P
             </div>
 
             <div className="space-y-2 pt-2">
-              <Button onClick={generatePlan} disabled={loading} className="w-full gap-2 border border-cyan-400/50 bg-cyan-500 font-mono text-xs font-bold text-slate-950 uppercase shadow-[0_0_20px_rgba(34,211,238,0.25)] hover:bg-cyan-400">
+              <Button onClick={generatePlan} disabled={loading} className="w-full gap-2 bg-primary font-mono text-xs font-bold text-primary-foreground uppercase hover:bg-primary/90">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {loading ? "Simulating..." : "Generate Strategy Plans"}
               </Button>

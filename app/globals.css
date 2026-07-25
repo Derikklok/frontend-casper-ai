@@ -134,10 +134,7 @@
 }
 
 .pit-wall-shell {
-  background:
-    radial-gradient(circle at 12% 8%, color-mix(in oklab, var(--primary) 10%, transparent), transparent 28rem),
-    radial-gradient(circle at 88% 24%, color-mix(in oklab, #facc15 6%, transparent), transparent 24rem),
-    linear-gradient(145deg, oklch(0.075 0.01 300), oklch(0.105 0.018 300));
+  background: oklch(0.095 0.012 300);
 }
 
 .pit-wall-shell::-webkit-scrollbar {
