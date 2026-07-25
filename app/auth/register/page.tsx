@@ -45,7 +45,8 @@ export default function RegisterPage() {
       { data: { operatorName, callSign, username, password } },
       {
         onSuccess: (response) => {
-          const auth = ((response as ApiResponseAuthResponse).result ?? response) as AuthResponse
+          // The generated register endpoint returns AuthResponse directly.
+          const auth = response as AuthResponse
           if (!auth.token) {
             setRegistrationError("Registration succeeded, but no session token was returned. Please log in.")
             return
@@ -168,6 +169,8 @@ export default function RegisterPage() {
                       placeholder="ENG-XXXX-XXXX"
                       type="text"
                       required
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase"
                     />
                     <Cpu className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -231,7 +234,7 @@ export default function RegisterPage() {
             <div className="font-quicksand text-center text-xs tracking-wider text-muted-foreground">
               Already possess clearance?{" "}
               <Link
-                href="/login"
+                href="/auth/login"
                 className="font-bold text-primary transition-colors hover:underline"
               >
                 Initialize Login Handshake
