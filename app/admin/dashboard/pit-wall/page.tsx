@@ -40,6 +40,7 @@ import {
 import TeamSetup from "@/components/team-management/teamSetup"
 import TelemetryDisplay from "@/components/pit-wall/TelemetryDisplay"
 import AiStrategyPanel from "@/components/pit-wall/AiStrategyPanel"
+import InitialStartegy from "@/components/initial-strategy/InitialStartegy"
 import { useGetActiveSequence } from "@/api/endpoints/race-sequence-controller/race-sequence-controller"
 import {
   useGetCircuits,
@@ -467,6 +468,12 @@ export default function PitWallPage() {
                 SYS_READY
               </Badge>
             </section>
+
+            <InitialStartegy
+              driver={effectiveDriver}
+              circuit={effectiveCircuit}
+              defaultLaps={activeSequence?.defaultLapCount ?? totalLaps}
+            />
 
             <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr] *:min-w-0">
               <TelemetryDisplay
