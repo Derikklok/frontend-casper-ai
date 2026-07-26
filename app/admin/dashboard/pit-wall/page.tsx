@@ -484,7 +484,7 @@ export default function PitWallPage() {
               />
               <AiStrategyPanel
                 key={`${effectiveDriver?.id ?? "driver"}-${effectiveCircuit?.id ?? "circuit"}-${activeSequence?.defaultLapCount ?? totalLaps}`}
-                driverId={effectiveDriver?.id}
+                driverId={effectiveDriver?.acronym ?? effectiveDriver?.id}
                 driverName={
                   effectiveDriver?.broadcastName ?? effectiveDriver?.fullName
                 }

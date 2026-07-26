@@ -42,7 +42,7 @@ export default function AiStrategyPanel({ driverId, driverName, trackId, current
   const usedCompounds = useMemo(() => Array.from(new Set(["SOFT", ...pitHistory.map((pit) => pit.compound), compound])), [compound, pitHistory])
   const payload = () => {
     const laps = lapTimes.split(",").map(Number).filter(Number.isFinite)
-    return { driver_id: driverId ?? driverName ?? "UNKNOWN", driving_mode: drivingMode, track_id: trackId ?? "UNKNOWN", lap_number: currentLap, total_laps: totalLaps, laps_remaining: totalLaps - currentLap, current_compound: compound, current_tyre_laps: tyreAge, compounds_used_in_race: usedCompounds, pit_stop_history: pitHistory, available_tyres: ["HARD", "MEDIUM"].filter((item) => !usedCompounds.includes(item)).map((item) => ({ compound: item, status: "NEW", life_at_start: 0 })), track_status: status, track_temp: temp, race_history: raceHistory.split("\n").filter(Boolean), pit_window_loss: 22, last_lap_time: laps.at(-1) ?? 80.5, last_5_lap_times: laps, fuel_load_kg: fuelLoad }
+    return { driver_id: driverId ?? "UNKNOWN", driving_mode: drivingMode, track_id: trackId ?? "UNKNOWN", lap_number: currentLap, total_laps: totalLaps, laps_remaining: totalLaps - currentLap, current_compound: compound, current_tyre_laps: tyreAge, compounds_used_in_race: usedCompounds, pit_stop_history: pitHistory, available_tyres: ["HARD", "MEDIUM"].filter((item) => !usedCompounds.includes(item)).map((item) => ({ compound: item, status: "NEW", life_at_start: 0 })), track_status: status, track_temp: temp, race_history: raceHistory.split("\n").filter(Boolean), pit_window_loss: 22, last_lap_time: laps.at(-1) ?? 80.5, last_5_lap_times: laps, fuel_load_kg: fuelLoad }
   }
   async function callAi(path: string) {
     setError("")
