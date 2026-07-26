@@ -43,26 +43,26 @@
 }
 
 .dark {
-    --background: oklch(0.145 0.008 326);
+    --background: oklch(17.005% 0.00263 325.348);
     --foreground: oklch(0.985 0 0);
-    --card: oklch(0.212 0.019 322.12);
+    --card: oklch(16.962% 0.00166 16.682);
     --card-foreground: oklch(0.985 0 0);
     --popover: oklch(0.212 0.019 322.12);
     --popover-foreground: oklch(0.985 0 0);
     --primary: oklch(0.444 0.177 26.899);
     --primary-foreground: oklch(0.971 0.013 17.38);
-    --secondary: oklch(0.274 0.006 286.033);
+    --secondary: oklch(0.22 0.018 300);
     --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.263 0.024 320.12);
+    --muted: oklch(0.19 0.018 300);
     --muted-foreground: oklch(0.711 0.019 323.02);
-    --accent: oklch(0.263 0.024 320.12);
+    --accent: oklch(0.24 0.035 78);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.542 0.034 322.5);
-    --chart-1: oklch(0.808 0.114 19.571);
-    --chart-2: oklch(0.637 0.237 25.331);
+    --chart-1: oklch(0.82 0.17 85);
+    --chart-2: oklch(0.72 0.19 195);
     --chart-3: oklch(0.577 0.245 27.325);
     --chart-4: oklch(0.505 0.213 27.518);
     --chart-5: oklch(0.444 0.177 26.899);
@@ -131,6 +131,24 @@
   .font-quicksand {
     font-family: "Quicksand", sans-serif;
   }
+}
+
+.pit-wall-shell {
+  background: oklch(0.095 0.012 300);
+}
+
+.pit-wall-shell::-webkit-scrollbar {
+  width: 8px;
+}
+
+.pit-wall-shell::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--primary) 45%, transparent);
+  border-radius: 999px;
+}
+
+::selection {
+  background: color-mix(in oklab, #facc15 35%, transparent);
+  color: white;
 }
 
 @layer base {

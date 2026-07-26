@@ -1,3 +1,8 @@
+"use client"
+
+import { useState, type FormEvent } from "react"
+import { useRouter } from "next/navigation"
+import Cookies from "js-cookie"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,8 +20,55 @@ import {
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRegister } from "@/api/endpoints/auth-controller/auth-controller"
+import type { ApiResponseAuthResponse, AuthResponse } from "@/api/models"
 
 export default function RegisterPage() {
+  const router = useRouter()
+  const registerMutation = useRegister()
+  const [operatorName, setOperatorName] = useState("")
+  const [callSign, setCallSign] = useState("")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [registrationError, setRegistrationError] = useState("")
+
+  const handleRegister = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setRegistrationError("")
+    if (!acceptedTerms) {
+      setRegistrationError("Acknowledge the confidentiality protocol before provisioning access.")
+      return
+    }
+
+    registerMutation.mutate(
+      { data: { operatorName, callSign, username, password } },
+      {
+        onSuccess: (response) => {
+          // The generated register endpoint returns AuthResponse directly.
+          const auth = response as AuthResponse
+          if (!auth.token) {
+            setRegistrationError("Registration succeeded, but no session token was returned. Please log in.")
+            return
+          }
+          Cookies.remove("auth_token")
+          Cookies.remove("user_details")
+          Cookies.remove("auth_token", { path: "/" })
+          Cookies.remove("user_details", { path: "/" })
+          localStorage.removeItem("auth-token")
+          Cookies.set("auth_token", auth.token, { path: "/" })
+          localStorage.setItem("auth-token", auth.token)
+          if (auth.user) Cookies.set("user_details", JSON.stringify(auth.user), { path: "/" })
+          router.push("/admin/dashboard")
+        },
+        onError: (error: unknown) => {
+          const apiError = error as { response?: { data?: ApiResponseAuthResponse } }
+          setRegistrationError(apiError.response?.data?.message ?? "Registration failed. Please review the entered details.")
+        },
+      }
+    )
+  }
+
   return (
     <div className="relative flex min-h-screen w-full flex-col-reverse lg:grid lg:grid-cols-2 lg:flex-row">
       {/* Left Area - Registration Form */}
@@ -53,7 +105,7 @@ export default function RegisterPage() {
 
           {/* Form */}
           <div className="grid gap-6">
-            <form>
+            <form onSubmit={handleRegister}>
               <div className="grid gap-5">
                 <div className="grid grid-cols-2 gap-4">
                   {/* Operative Name */}
@@ -67,8 +119,11 @@ export default function RegisterPage() {
                     <div className="relative">
                       <Input
                         id="name"
+                        value={operatorName}
+                        onChange={(event) => setOperatorName(event.target.value)}
                         placeholder="John Doe"
                         type="text"
+                        required
                         className="h-11 border-border/50 bg-muted/40 pl-10 font-mono text-foreground"
                       />
                       <UserCircle className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -86,8 +141,11 @@ export default function RegisterPage() {
                     <div className="relative">
                       <Input
                         id="callsign"
+                        value={callSign}
+                        onChange={(event) => setCallSign(event.target.value.toUpperCase())}
                         placeholder="GHOST-1"
                         type="text"
+                        required
                         className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase"
                       />
                       <ScanFace className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -98,16 +156,21 @@ export default function RegisterPage() {
                 {/* ID Field */}
                 <div className="grid gap-2">
                   <Label
-                    htmlFor="id"
+                    htmlFor="username"
                     className="font-quicksand text-xs tracking-wider text-muted-foreground uppercase"
                   >
                     Assigned Engineering ID
                   </Label>
                   <div className="relative">
                     <Input
-                      id="id"
+                      id="username"
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
                       placeholder="ENG-XXXX-XXXX"
                       type="text"
+                      required
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase"
                     />
                     <Cpu className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -125,8 +188,12 @@ export default function RegisterPage() {
                   <div className="relative">
                     <Input
                       id="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
                       placeholder="••••••••••••"
                       type="password"
+                      autoComplete="new-password"
+                      required
                       className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground"
                     />
                     <KeyRound className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -137,6 +204,8 @@ export default function RegisterPage() {
                 <div className="my-3 flex items-start space-x-3 rounded-lg border border-border/50 bg-secondary/30 p-3">
                   <Checkbox
                     id="terms"
+                    checked={acceptedTerms}
+                    onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
                     className="mt-0.5 border-muted-foreground/40 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                   />
                   <div className="flex flex-col gap-1">
@@ -154,8 +223,10 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                <Button className="h-12 w-full font-heading text-base font-semibold tracking-wide shadow-lg shadow-primary/20 transition-all hover:bg-primary/90">
-                  Provision Environment
+                {registrationError && <p className="text-xs font-medium text-destructive">{registrationError}</p>}
+
+                <Button type="submit" disabled={registerMutation.isPending} className="h-12 w-full font-heading text-base font-semibold tracking-wide shadow-lg shadow-primary/20 transition-all hover:bg-primary/90">
+                  {registerMutation.isPending ? "Provisioning Environment..." : "Provision Environment"}
                 </Button>
               </div>
             </form>
@@ -163,7 +234,7 @@ export default function RegisterPage() {
             <div className="font-quicksand text-center text-xs tracking-wider text-muted-foreground">
               Already possess clearance?{" "}
               <Link
-                href="/login"
+                href="/auth/login"
                 className="font-bold text-primary transition-colors hover:underline"
               >
                 Initialize Login Handshake

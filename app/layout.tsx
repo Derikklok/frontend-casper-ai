@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Roboto, Lora } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { cn } from "@/lib/utils"
+import Providers from "@/providers/providers"
 
 const loraHeading = Lora({ subsets: ["latin"], variable: "--font-heading" })
 
@@ -31,7 +32,9 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <Providers>{children}</Providers>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -1,0 +1,516 @@
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Cookies from "js-cookie"
+import TeamSetup from "@/components/team-management/teamSetup"
+import RaceSequenceSetup from "@/components/race-sequence-management/raceSequenceSetup"
+import { useGetActiveSequence } from "@/api/endpoints/race-sequence-controller/race-sequence-controller"
+import { useGetDrivers, useGetCircuits } from "@/api/endpoints/asset-controller/asset-controller"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { 
+  AlertTriangle, BrainCircuit, Car, CheckCircle2,
+  Flag, Gauge, LayoutDashboard, LogOut, Map, Package, RadioTower, Settings, 
+  ThermometerSun, Timer, User, Zap, Check, X
+} from "lucide-react"
+import { 
+  ResponsiveContainer, XAxis, YAxis, 
+  CartesianGrid, Tooltip, Area, AreaChart 
+} from "recharts"
+
+// Mock Data for Telemetry Chart
+const telemetryData = Array.from({ length: 40 }).map((_, i) => ({
+  distance: i * 50,
+  speed: 100 + Math.random() * 150 + (i > 10 && i < 20 ? 80 : 0) - (i > 30 ? 120 : 0),
+  throttle: Math.random() > 0.5 ? 100 : Math.random() * 50,
+}))
+
+const timingData = [
+  { p: 1, name: "VER", gap: "LEADER", tire: "M", laps: 12 },
+  { p: 2, name: "NOR", gap: "+1.243", tire: "M", laps: 12 },
+  { p: 3, name: "GHO (Us)", gap: "+3.104", tire: "S", laps: 18, highlight: true },
+  { p: 4, name: "LEC", gap: "+4.882", tire: "H", laps: 4 },
+  { p: 5, name: "PIA", gap: "+5.120", tire: "M", laps: 12 },
+]
+
+export default function EngineerDashboard() {
+  const [navActive, setNavActive] = useState("Dashboard")
+  const router = useRouter()
+
+  const handleExit = () => {
+    Cookies.remove("auth_token")
+    Cookies.remove("user_details")
+    router.push("/auth/login")
+  }
+
+  const navItems = [
+    { name: "Dashboard", icon: LayoutDashboard },
+    { name: "Race Seq", icon: Flag },
+    { name: "Strategy Matrix", icon: BrainCircuit },
+    { name: "Weather Radar", icon: Map },
+    { name: "Car Vitals", icon: Car },
+    { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },
+    { name: "Settings", icon: Settings },
+  ]
+
+  return (
+    <div className="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      
+      {/* 1. Global Navigation Bar */}
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background px-6 py-3">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 pr-6 border-r border-border/50">
+            <BrainCircuit className="h-5 w-5 text-primary" />
+            <span className="font-bitcount text-lg font-bold tracking-[0.18em] text-foreground">
+              CASPER<span className="text-primary">.AI</span>
+            </span>
+          </div>
+          
+          {/* Main Nav Links */}
+          <nav className="hidden lg:flex items-center gap-1 font-quicksand text-xs font-semibold uppercase tracking-widest">
+            {navItems.map((item) => (
+              <button
+                key={item.name}
+                onClick={() => "href" in item && item.href ? router.push(item.href) : setNavActive(item.name)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+                  navActive === item.name 
+                    ? "bg-primary/10 text-primary" 
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <item.icon className="h-3.5 w-3.5" />
+                {item.name}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* Top Right User & Status */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted/50 border border-border">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+              </span>
+              SYS: ONLINE
+            </div>
+            <div className="px-3 py-1.5 rounded bg-muted/50 border border-border text-muted-foreground">
+              ENG-77X | GHOST-1
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExit}
+            className="font-quicksand gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Exit
+          </Button>
+        </div>
+      </header>
+
+      {/* Settings View */}
+      {navActive === "Settings" && <TeamSetup onBack={() => setNavActive("Dashboard")} />}
+
+      {/* Race Sequence View */}
+      {navActive === "Race Seq" && <RaceSequenceSetup />}
+
+      {/* 2. Top Race Context Bar */}
+      {navActive !== "Settings" && navActive !== "Race Seq" && (
+      <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border border-b border-border bg-muted/20">
+        <ContextStat icon={Flag} label="Race Status" value="GREEN FLAG" valueColor="text-green-500" />
+        <ContextStat icon={Timer} label="Current Lap" value="Lap 42 / 72" />
+        <ContextStat icon={Map} label="Track Sectors" value="S1: Clear | S2: Clear" />
+        <ContextStat icon={ThermometerSun} label="Track Temp" value="34.2 °C" />
+        <ContextStat icon={AlertTriangle} label="Rain Risk" value="12% (ETA 40m)" />
+      </div>
+      )}
+
+      {/* Main Dashboard Grid */}
+      {navActive !== "Settings" && navActive !== "Race Seq" && (
+      <main className="flex-1 p-6 overflow-auto">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-6">
+
+          {/* LEFT COLUMN: CASPER AI Strategy Alert (Human in the loop core focus) */}
+          <div className="md:col-span-4 flex flex-col gap-6">
+            <Card className="relative overflow-hidden border-primary/50 bg-card">
+               <div className="absolute top-0 left-0 h-1 w-full bg-primary"></div>
+               <CardHeader className="pb-2">
+                 <div className="flex justify-between items-start">
+                   <div className="flex items-center gap-2 text-primary font-bold">
+                     <Zap className="h-5 w-5 fill-primary" /> 
+                     <span className="font-heading uppercase tracking-widest text-lg">Hitl Intervention</span>
+                   </div>
+                   <Badge variant="destructive" className="animate-pulse font-mono rounded-sm">CRITICAL</Badge>
+                 </div>
+                 <CardTitle className="text-2xl font-bold mt-2">Undercut Window Open</CardTitle>
+                 <CardDescription className="font-google-flex text-base">
+                   Car 4 (LEC) tires dropping rapidly. Pitting now yields a 68% probability of track position overtake.
+                 </CardDescription>
+               </CardHeader>
+               <CardContent>
+                 <div className="grid gap-3 font-mono text-sm mb-6 mt-2">
+                   <div className="flex justify-between py-2 border-b border-border/50">
+                     <span className="text-muted-foreground">Calculated Pit Loss:</span>
+                     <span className="text-foreground font-bold">21.4s</span>
+                   </div>
+                   <div className="flex justify-between py-2 border-b border-border/50">
+                     <span className="text-muted-foreground">Estimated Gap at Exit:</span>
+                     <span className="text-green-500 font-bold">+1.2s ahead of LEC</span>
+                   </div>
+                   <div className="flex justify-between py-2">
+                     <span className="text-muted-foreground">Suggested Compound:</span>
+                     <span className="text-white bg-zinc-700 px-2 rounded font-bold">HARD (C3)</span>
+                   </div>
+                 </div>
+                 <div className="flex gap-3 w-full">
+                    <Button className="w-2/3 h-12 bg-primary hover:bg-primary/80 font-heading tracking-widest uppercase">
+                      <Check className="mr-2 h-4 w-4" /> Confirm Box
+                    </Button>
+                    <Button variant="outline" className="w-1/3 h-12 border-border/70 text-muted-foreground uppercase tracking-widest font-heading">
+                      <X className="mr-2 h-4 w-4" /> Hold
+                    </Button>
+                 </div>
+               </CardContent>
+            </Card>
+
+            {/* Tire Degradation Widget */}
+            <Card className="border-border/60 flex-1">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="font-heading text-lg">Tire Telemetry</CardTitle>
+                  <CardDescription>Soft Compound (18 Laps)</CardDescription>
+                </div>
+                <div className="h-8 w-8 rounded bg-red-500/20 flex items-center justify-center text-red-500 font-bold border border-red-500/50">
+                   S
+                </div>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4 mt-2">
+                 <TireStat label="Front Left" wear={82} temp="110°C" color="bg-yellow-500" />
+                 <TireStat label="Front Right" wear={78} temp="108°C" color="bg-green-500" />
+                 <TireStat label="Rear Left" wear={45} temp="124°C" color="bg-primary" />
+                 <TireStat label="Rear Right" wear={42} temp="126°C" color="bg-primary" />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* MIDDLE COLUMN: Live Telemetry Graph & Core Data */}
+          <div className="md:col-span-5 flex flex-col gap-6">
+            <Card className="border-border/60 flex-1 flex flex-col">
+              <CardHeader className="pb-0">
+                <CardTitle className="font-heading text-lg flex items-center justify-between">
+                  <span>Speed Trace vs Track Distance</span>
+                <Badge variant="outline" className="border-primary/50 font-mono text-xs text-primary">LIVE <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span></Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 pt-4">
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={telemetryData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorSpeed" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                    <XAxis dataKey="distance" stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: 'monospace'}} />
+                    <YAxis stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: 'monospace'}} domain={[0, 350]} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,0,0,0.3)', borderRadius: '8px' }}
+                      itemStyle={{ fontFamily: 'monospace', color: 'white' }}
+                      labelStyle={{ display: 'none' }}
+                    />
+                    <Area type="monotone" dataKey="speed" stroke="var(--color-primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorSpeed)" isAnimationActive={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Powertrain / ERS */}
+            <div className="grid grid-cols-2 gap-6">
+              <Card className="border-border/60">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
+                  <Gauge className="h-8 w-8 text-muted-foreground mb-2" />
+                  <span className="font-quicksand text-xs uppercase tracking-widest text-muted-foreground mb-1">ERS Deployed</span>
+                  <span className="font-heading text-3xl font-bold">42<span className="text-lg text-muted-foreground">%</span></span>
+                  <div className="w-full bg-secondary h-2 mt-3 rounded-full overflow-hidden">
+                    <div className="bg-yellow-400 h-full w-[42%]"></div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/60">
+                <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
+                  <BatteryIcon level={88} />
+                  <span className="font-quicksand text-xs uppercase tracking-widest text-muted-foreground mb-1 mt-2">SoC (Charge)</span>
+                  <span className="font-heading text-3xl font-bold">88<span className="text-lg text-muted-foreground">%</span></span>
+                  <div className="w-full bg-secondary h-2 mt-3 rounded-full overflow-hidden">
+                    <div className="bg-green-500 h-full w-[88%]"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN: Timing Tower */}
+          <div className="md:col-span-3">
+             <Card className="border-border/60 h-full flex flex-col">
+              <CardHeader className="pb-3 border-b border-border/50">
+                <CardTitle className="font-heading text-lg">Timing Tower</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 flex-1 overflow-auto">
+                 <div className="grid grid-cols-[30px_1fr_60px_40px] text-xs font-quicksand uppercase tracking-wider text-muted-foreground p-3 border-b border-border/20">
+                   <div>P</div>
+                   <div>Driver</div>
+                   <div className="text-right">Gap</div>
+                   <div className="text-right">Tyre</div>
+                 </div>
+                 <div className="divide-y divide-border/20">
+                   {timingData.map((driver) => (
+                     <div 
+                      key={driver.p} 
+                      className={`grid grid-cols-[30px_1fr_60px_40px] items-center p-3 font-mono text-sm transition-colors hover:bg-muted/30 ${driver.highlight ? 'border-l-2 border-l-primary bg-primary/10' : ''}`}
+                     >
+                       <div className={`${driver.highlight ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{driver.p}</div>
+                       <div className="font-bold">{driver.name}</div>
+                       <div className={`text-right ${driver.gap === 'LEADER' ? 'text-muted-foreground text-xs' : ''}`}>{driver.gap}</div>
+                       <div className="text-right flex justify-end">
+                         <span className={`flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold ${
+                           driver.tire === 'S' ? 'bg-red-500 text-white' : 
+                           driver.tire === 'M' ? 'bg-yellow-500 text-black' : 'bg-gray-100 text-black'
+                         }`}>
+                           {driver.tire}
+                         </span>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* BOTTOM ROW: Live Data Widgets */}
+          <div className="md:col-span-12">
+            <LiveDataWidgets />
+          </div>
+
+        </div>
+      </main>
+      )}
+    </div>
+  )
+}
+
+// -------------------------------------------------------------
+// Helper UI Components below to keep main file clean
+// -------------------------------------------------------------
+
+function ContextStat({ icon: Icon, label, value, valueColor = "text-foreground" }: { icon: React.ElementType, label: string, value: string, valueColor?: string }) {
+  return (
+    <div className="px-6 py-3 flex items-center gap-4">
+      <div className="bg-background border border-border p-2 rounded-md">
+        <Icon className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <div>
+        <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
+        <p className={`font-mono text-sm font-semibold mt-0.5 ${valueColor}`}>{value}</p>
+      </div>
+    </div>
+  )
+}
+
+function TireStat({ label, wear, temp, color }: { label: string, wear: number, temp: string, color: string }) {
+  return (
+    <div className="flex flex-col gap-1 p-3 rounded-xl bg-secondary/30 border border-border/50">
+      <span className="font-quicksand text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <div className="flex items-end justify-between font-mono mt-1">
+        <span className="text-xl font-bold">{wear}%</span>
+        <span className="text-xs text-muted-foreground mb-1">{temp}</span>
+      </div>
+      <div className="w-full bg-background border border-border/50 h-2 mt-1 rounded-full overflow-hidden">
+        <div className={`h-full ${color}`} style={{ width: `${wear}%` }}></div>
+      </div>
+    </div>
+  )
+}
+
+function BatteryIcon({ level }: { level: number }) {
+  return (
+    <div className="relative w-8 h-4 border-2 border-muted-foreground rounded-sm p-px">
+       <div className="h-full bg-foreground" style={{ width: `${level}%` }}></div>
+       <div className="absolute -right-1 top-0.75 w-0.5 h-1.5 bg-muted-foreground rounded-r-sm"></div>
+    </div>
+  )
+}
+
+function LiveDataWidgets() {
+  const router = useRouter()
+  const activeSeqQuery = useGetActiveSequence()
+  const driversQuery = useGetDrivers()
+  const circuitsQuery = useGetCircuits()
+
+  const seq = activeSeqQuery.data?.result
+  const drivers = driversQuery.data?.result ?? []
+  const circuits = circuitsQuery.data?.result ?? []
+
+  const statusColor: Record<string, string> = {
+    ACTIVE: "text-green-500 border-green-500/30 bg-green-500/10",
+    PLANNED: "text-yellow-500 border-yellow-500/30 bg-yellow-500/10",
+    COMPLETED: "text-muted-foreground border-border bg-muted/20",
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <Card className="relative overflow-hidden border-primary/40 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-primary" />
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
+              <Flag className="h-4 w-4 text-primary" /> Active Sequence
+            </CardTitle>
+            {seq?.status && (
+              <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded border ${statusColor[seq.status] ?? "text-muted-foreground border-border"}`}>
+                {seq.status}
+              </span>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {activeSeqQuery.isLoading ? (
+            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading sequence data...</p>
+          ) : seq ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
+                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Driver</p>
+                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.driverName ?? seq.driverId ?? "—"}</p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
+                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Circuit</p>
+                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.circuitName ?? seq.circuitId ?? "—"}</p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
+                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Car</p>
+                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.carName ?? seq.carId ?? "—"}</p>
+                </div>
+                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
+                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Laps</p>
+                  <p className="font-mono text-sm font-bold mt-1 text-foreground">{seq.defaultLapCount ?? "—"}</p>
+                </div>
+              </div>
+              {seq.selectedCompounds?.length ? (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {seq.selectedCompounds.map((c) => (
+                    <span key={c} className={`text-[10px] font-bold px-2 py-0.5 rounded border font-mono ${
+                      c === "Soft" ? "bg-red-500/15 border-red-500/40 text-red-400" :
+                      c === "Medium" ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-400" :
+                      c === "Hard" ? "bg-zinc-400/15 border-zinc-400/40 text-zinc-300" :
+                      c === "Wet" ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300" :
+                      "bg-green-500/15 border-green-500/40 text-green-400"
+                    }`}>{c}</span>
+                  ))}
+                </div>
+              ) : null}
+              <Button
+                onClick={() => router.push("/admin/dashboard/pit-wall")}
+                className="w-full h-10 gap-2 bg-primary font-heading text-xs tracking-widest uppercase hover:bg-primary/90"
+              >
+                <RadioTower className="h-3.5 w-3.5" />
+                Initiate Pit Wall
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
+              <Flag className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">No active sequence. Configure one in Race Seq.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="relative overflow-hidden border-border/60 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-muted-foreground" />
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
+              <User className="h-4 w-4 text-muted-foreground" /> Driver Roster
+            </CardTitle>
+              <span className="rounded border border-border/60 bg-muted/20 px-2 py-0.5 font-mono text-[10px] font-bold text-muted-foreground">
+              {driversQuery.isLoading ? "..." : `${drivers.length} REG`}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {driversQuery.isLoading ? (
+            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading drivers...</p>
+          ) : drivers.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
+              <User className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">No drivers registered yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
+              {drivers.map((driver) => (
+                <div key={driver.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-xs font-bold text-primary w-6 text-center">{driver.driverNumber ?? "—"}</span>
+                    <div>
+                      <p className="font-mono text-xs font-semibold text-foreground">{driver.broadcastName ?? driver.fullName ?? "Unknown"}</p>
+                      <p className="font-quicksand text-[10px] text-muted-foreground uppercase tracking-wider">{driver.countryCode ?? "—"} · {driver.acronym ?? "---"}</p>
+                    </div>
+                  </div>
+                  {seq?.driverId === driver.id && (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="relative overflow-hidden border-border/60 bg-card">
+        <div className="absolute top-0 left-0 h-0.5 w-full bg-amber-500" />
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
+              <Map className="h-4 w-4 text-amber-400" /> Circuit Registry
+            </CardTitle>
+            <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400">
+              {circuitsQuery.isLoading ? "..." : `${circuits.length} TRK`}
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {circuitsQuery.isLoading ? (
+            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading circuits...</p>
+          ) : circuits.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
+              <Map className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">No circuits registered yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
+              {circuits.map((circuit) => (
+                <div key={circuit.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
+                  <div>
+                    <p className="font-mono text-xs font-semibold text-foreground">{circuit.name ?? "Unknown"}</p>
+                    <p className="font-quicksand text-[10px] text-muted-foreground uppercase tracking-wider">
+                      {circuit.country ?? "—"} · {circuit.length ? `${circuit.length} km` : "—"} · {circuit.numberOfCorners ?? "—"} corners
+                    </p>
+                  </div>
+                  {seq?.circuitId === circuit.id && (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

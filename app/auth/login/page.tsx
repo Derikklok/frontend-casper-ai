@@ -1,13 +1,80 @@
-import { Button, buttonVariants } from "@/components/ui/button"
+'use client'
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Cookies from 'js-cookie'
+
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { BrainCircuit, Fingerprint, Lock, ShieldCheck, Zap } from "lucide-react"
+import { BrainCircuit, Fingerprint, Loader2, Lock, ShieldCheck, Zap } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 
+import { useLogin } from "@/api/endpoints/auth-controller/auth-controller"
+import type { ApiResponseAuthResponse, AuthResponse } from "@/api/models"
+
 export default function LoginPage() {
+  const router = useRouter()
+
+  // 1. Form state
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [rememberMe, setRememberMe] = useState(false)
+  const [loginError, setLoginError] = useState("")
+
+   // 2. TanStack Query Mutation
+  const loginMutation = useLogin()
+
+  // 3. Submit Handler
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoginError("")
+
+    // Assuming LoginRequest model expects { username, password }
+    // Change 'username' to whatever your Spring DTO expects (e.g., email, engineeringId)
+    loginMutation.mutate(
+      { data: { username, password } },
+      {
+        onSuccess: (response) => {
+          const auth = ((response as ApiResponseAuthResponse).result ?? response) as AuthResponse
+          const token = auth.token
+          const user = auth.user
+
+          if (token) {
+            // Replace any expired session with the credentials returned by this login.
+            Cookies.remove("auth_token")
+            Cookies.remove("user_details")
+            Cookies.remove("auth_token", { path: "/" })
+            Cookies.remove("user_details", { path: "/" })
+            localStorage.removeItem("auth-token")
+
+            const cookieOptions = rememberMe ? { expires: 1, path: "/" } : { path: "/" }
+            Cookies.set("auth_token", token, cookieOptions)
+            localStorage.setItem("auth-token", token)
+            
+            if (user) {
+              Cookies.set("user_details", JSON.stringify(user), cookieOptions)
+            }
+
+            // 5. Redirect to Admin Dashboard
+            router.push("/admin/dashboard")
+          } else {
+            setLoginError("Invalid response from server. No token received.")
+          }
+        },
+        onError: (error: unknown) => {
+          const err = error as { response?: { data?: ApiResponseAuthResponse } }
+          setLoginError(
+            err?.response?.data?.message || "Authentication failed. Verify credentials."
+          )
+        },
+      }
+    )
+  }
+
   return (
     <div className="relative flex min-h-screen w-full lg:grid lg:grid-cols-2">
       {/* Left Area - F1 Hero Image Showcase */}
@@ -103,7 +170,7 @@ export default function LoginPage() {
 
           {/* Form */}
           <div className="grid gap-6">
-            <form>
+            <form onSubmit={handleLogin}>
               <div className="grid gap-5">
                 {/* ID Field */}
                 <div className="grid gap-2">
@@ -115,11 +182,14 @@ export default function LoginPage() {
                   </Label>
                   <div className="relative">
                     <Input
-                      id="id"
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
                       placeholder="ENG-XXXX-XXXX"
                       type="text"
-                      autoCapitalize="characters"
+                      autoCapitalize="none"
                       autoCorrect="off"
+                      required
                       className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground uppercase focus-visible:border-primary/50"
                     />
                     <Lock className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -145,8 +215,11 @@ export default function LoginPage() {
                   <div className="relative">
                     <Input
                       id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••••••"
                       type="password"
+                      autoComplete="current-password"
                       className="h-11 border-border/50 bg-muted/40 pl-10 font-mono tracking-widest text-foreground focus-visible:border-primary/50"
                     />
                     <ShieldCheck className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
@@ -157,6 +230,8 @@ export default function LoginPage() {
                 <div className="my-2 flex items-center space-x-2">
                   <Checkbox
                     id="remember"
+                    checked={rememberMe}
+                    onCheckedChange={(checked) => setRememberMe(checked == true)}
                     className="border-muted-foreground/40 data-[state=checked]:border-primary data-[state=checked]:bg-primary"
                   />
                   <label
@@ -167,14 +242,35 @@ export default function LoginPage() {
                   </label>
                 </div>
 
-                <Link 
+                {/* Error Message Display */}
+                {loginError && (
+                  <p className="text-xs font-medium text-destructive">{loginError}</p>
+                )}
+
+                {/* <Link 
                   href="/dashboard" 
                   className={buttonVariants({ 
                     className: "mt-2 h-12 w-full font-heading text-base font-semibold tracking-wide shadow-[0_0_20px_-5px_rgba(var(--color-primary-rgb),0.5)] transition-transform duration-300 hover:scale-[1.02]" 
                   })}
                 >
                   Initiate Handshake <Zap className="ml-2 h-4 w-4" />
-                </Link>
+                </Link> */}
+                {/* Submit Button (Changed from Link to Button) */}
+                <Button 
+                  type="submit" 
+                  disabled={loginMutation.isPending}
+                  className="mt-2 h-12 w-full font-heading text-base font-semibold tracking-wide shadow-[0_0_20px_-5px_rgba(var(--color-primary-rgb),0.5)] transition-transform duration-300 hover:scale-[1.02]"
+                >
+                  {loginMutation.isPending ? (
+                    <>
+                      Authenticating... <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    </>
+                  ) : (
+                    <>
+                      Initiate Handshake <Zap className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
               </div>
             </form>
 
