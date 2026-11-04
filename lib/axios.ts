@@ -6,6 +6,10 @@ export const axiosAppInstance = Axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
 })
 
+export const telemetryApiInstance = Axios.create({
+  baseURL: process.env.NEXT_PUBLIC_TELEMETRY_API_URL,
+})
+
 // Request Interceptor: Automatically inject auth tokens
 axiosAppInstance.interceptors.request.use((config) => {
   const isAuthenticationRequest = config.url?.includes("/auth/")

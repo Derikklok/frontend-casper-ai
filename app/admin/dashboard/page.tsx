@@ -48,7 +48,7 @@ export default function EngineerDashboard() {
   const navItems = [
     { name: "Dashboard", icon: LayoutDashboard },
     { name: "Race Seq", icon: Flag },
-    { name: "Strategy Matrix", icon: BrainCircuit },
+    { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
     { name: "Weather Radar", icon: Map },
     { name: "Car Vitals", icon: Car },
     { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },

@@ -22,7 +22,7 @@ const NAV_ITEMS: NavigationItem[] = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
   { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
   { name: "Pit Wall", icon: RadioTower, href: "/admin/dashboard/pit-wall" },
-  { name: "Strategy Matrix", icon: BrainCircuit },
+  { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
   { name: "Weather Radar", icon: Map },
   { name: "Car Vitals", icon: Car },
   { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },

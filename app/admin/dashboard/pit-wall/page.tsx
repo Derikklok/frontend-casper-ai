@@ -234,7 +234,7 @@ export default function PitWallPage() {
     { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
     { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
     { name: "Pit Wall", icon: RadioTower },
-    { name: "Strategy Matrix", icon: BrainCircuit },
+    { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
     { name: "Weather Radar", icon: Map },
     { name: "Car Vitals", icon: Car },
     {

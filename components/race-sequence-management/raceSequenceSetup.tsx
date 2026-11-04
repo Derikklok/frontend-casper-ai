@@ -113,8 +113,8 @@ function getSequenceTypeLabel(sequenceType: RaceSequenceSaveRequestSequenceType)
 
 function getCardTone(isSelected: boolean) {
   return isSelected
-    ? "border-sky-400/60 bg-gradient-to-br from-sky-400/12 via-card to-transparent shadow-lg shadow-sky-950/20 ring-1 ring-sky-400/20"
-    : "border-border/60 bg-background/50 hover:border-sky-400/30 hover:bg-sky-400/5 hover:shadow-lg transition-all duration-300"
+    ? "border-primary/70 bg-primary/8 ring-1 ring-primary/20"
+    : "border-border/70 bg-card hover:border-primary/40 hover:bg-primary/5"
 }
 
 function mapCarConfig(config?: CarConfigDto | null): CarConfigDto {
@@ -270,65 +270,55 @@ export default function RaceSequenceSetup() {
   const canSubmit = Boolean(effectiveDriverId && effectiveCircuitId && effectiveCarId && form.selectedCompounds.length)
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.08),transparent_28rem),linear-gradient(145deg,var(--background),color-mix(in_oklab,var(--background)_88%,#172033))]">
-      {/* Animated background elements */}
-      <div className="fixed inset-0 -z-10 overflow-hidden">
-        <div className="absolute top-0 -left-4 h-[500px] w-[500px] rounded-full bg-sky-400/5 blur-3xl animate-pulse" />
-        <div className="absolute bottom-0 -right-4 h-[500px] w-[500px] rounded-full bg-amber-300/5 blur-3xl animate-pulse delay-1000" />
-      </div>
-
-      {/* Header with animated gradient */}
-      <div 
-        className="relative overflow-hidden border-b border-border/60 bg-card/70 animate-in fade-in slide-in-from-top-4 duration-700"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_36%),radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.04),transparent_34%)]" />
-        <div className="relative mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3 animate-in fade-in slide-in-from-left-4 duration-700">
+    <div className="min-h-screen bg-muted/20">
+      <div className="border-b border-border bg-background">
+        <div className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <div className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-2">
-                <Sparkles className="h-4 w-4 text-sky-300" />
+              <div className="rounded-md border border-primary/25 bg-primary/10 p-2">
+                <Sparkles className="h-4 w-4 text-primary" />
               </div>
-              <span className="text-xs font-semibold uppercase tracking-[0.3em] text-sky-300">Race sequence / control room</span>
+              <span className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">Race sequence / control room</span>
             </div>
             <div className="space-y-2">
-              <h1 className="font-heading text-4xl font-bold uppercase tracking-tight sm:text-5xl">
+              <h1 className="font-heading text-3xl font-bold uppercase tracking-tight sm:text-4xl">
                 Build the sequence
               </h1>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
                 Configure the session type, driver, circuit, compounds, and car setup before the engineer hands the sequence off to race control.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-right-4 duration-700">
-            <Badge className="rounded-full border border-border/60 bg-background/80 px-4 py-1.5 text-[0.7rem] text-muted-foreground backdrop-blur-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="rounded-md border border-border bg-muted px-3 py-1.5 text-[0.65rem] text-muted-foreground">
               {activeSequence ? activeSequence.status ?? "PLANNED" : "DRAFT"}
             </Badge>
-            <Badge className="rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-1.5 text-[0.7rem] text-sky-300 backdrop-blur-sm">
+            <Badge className="rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-[0.65rem] text-primary">
               {getSequenceTypeLabel(effectiveSequenceType)}
             </Badge>
-            <div className="rounded-full border border-amber-300/20 bg-amber-300/10 px-4 py-1.5 text-[0.7rem] font-semibold text-amber-200">
+            <div className="rounded-md border border-border bg-muted px-3 py-1.5 text-[0.65rem] font-semibold text-muted-foreground">
               {progressPercentage}% Complete
             </div>
           </div>
         </div>
       </div>
 
-      <main className="mx-auto grid max-w-[1500px] gap-6 px-4 py-6 sm:px-6 xl:grid-cols-[minmax(0,1.65fr)_360px]">
+      <main className="mx-auto grid max-w-[1440px] gap-5 px-4 py-5 sm:px-6 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-6">
           {/* Session Type Card */}
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <Card className="border-border/40 bg-card/80 backdrop-blur-sm shadow-xl shadow-primary/5 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300">
+          <div>
+            <Card className="rounded-lg border-border bg-card shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
+                    <CardTitle className="flex items-center gap-2 text-lg">
                       <Flag className="h-6 w-6 text-primary" />
                       Session Type
                     </CardTitle>
                     <CardDescription>Start by choosing whether this sequence is for a race weekend or a test session.</CardDescription>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary backdrop-blur-sm">
+                  <Badge variant="outline" className="rounded-md border-primary/30 bg-primary/10 px-2 py-1 text-primary">
                     Step 1
                   </Badge>
                 </div>
@@ -348,13 +338,13 @@ export default function RaceSequenceSetup() {
                         }))
                       }
                       className={cn(
-                        "relative rounded-xl border-2 p-5 text-left transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]",
+                        "relative rounded-md border p-4 text-left transition-colors",
                         getCardTone(selected),
                         selected ? "border-primary/40" : "border-border/40"
                       )}
                     >
                       {selected && (
-                        <div className="absolute -top-2 -right-2 rounded-full bg-primary p-1 animate-in fade-in zoom-in duration-300">
+                        <div className="absolute right-3 top-3 rounded-full bg-primary p-1">
                           <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                         </div>
                       )}
@@ -379,18 +369,18 @@ export default function RaceSequenceSetup() {
           </div>
 
           {/* Driver, Circuit, Car Card */}
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <Card className="border-border/40 bg-card/80 backdrop-blur-sm shadow-xl shadow-primary/5 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300">
+          <div>
+            <Card className="rounded-lg border-border bg-card shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
+                    <CardTitle className="flex items-center gap-2 text-lg">
                       <Users className="h-6 w-6 text-primary" />
                       Driver, Circuit, Car
                     </CardTitle>
                     <CardDescription>Match the driver to the circuit and assign the correct chassis for the sequence.</CardDescription>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary backdrop-blur-sm">
+                  <Badge variant="outline" className="rounded-md border-primary/30 bg-primary/10 px-2 py-1 text-primary">
                     Steps 2-5
                   </Badge>
                 </div>
@@ -404,7 +394,7 @@ export default function RaceSequenceSetup() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {drivers.length === 0 ? (
-                      <div className="col-span-full rounded-xl border-2 border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                      <div className="col-span-full rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                         No drivers available yet. Create the driver assets first.
                       </div>
                     ) : (
@@ -417,13 +407,13 @@ export default function RaceSequenceSetup() {
                             type="button"
                             onClick={() => setForm((current) => ({ ...current, driverId: driver.id }))}
                             className={cn(
-                              "relative rounded-xl border-2 p-4 text-left transition-all duration-300 hover:scale-[1.03] active:scale-[0.97]",
+                              "relative rounded-md border p-4 text-left transition-colors",
                               getCardTone(selected),
                               selected ? "border-primary/40" : "border-border/40"
                             )}
                           >
                             {selected && (
-                              <div className="absolute -top-2 -right-2 rounded-full bg-primary p-1 animate-in fade-in zoom-in duration-300">
+                              <div className="absolute right-3 top-3 rounded-full bg-primary p-1">
                                 <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                               </div>
                             )}
@@ -455,7 +445,7 @@ export default function RaceSequenceSetup() {
                   </div>
                   <div className="grid gap-3">
                     {circuits.length === 0 ? (
-                      <div className="rounded-xl border-2 border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                      <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                         No circuits available yet. Create the circuit assets first.
                       </div>
                     ) : (
@@ -471,13 +461,13 @@ export default function RaceSequenceSetup() {
                             type="button"
                             onClick={() => setForm((current) => ({ ...current, circuitId: circuit.id }))}
                             className={cn(
-                              "relative rounded-xl border-2 p-5 text-left transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]",
+                              "relative rounded-md border p-4 text-left transition-colors",
                               getCardTone(selected),
                               selected ? "border-primary/40" : "border-border/40"
                             )}
                           >
                             {selected && (
-                              <div className="absolute -top-2 -right-2 rounded-full bg-primary p-1 animate-in fade-in zoom-in duration-300">
+                              <div className="absolute right-3 top-3 rounded-full bg-primary p-1">
                                 <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                               </div>
                             )}
@@ -528,8 +518,7 @@ export default function RaceSequenceSetup() {
                   {selectedCircuit && (
                     <div 
                       className={cn(
-                        "rounded-xl border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-5 transition-all duration-500",
-                        "animate-in slide-in-from-top-4"
+                        "rounded-md border border-primary/25 bg-primary/5 p-4"
                       )}
                     >
                       <div className="flex items-center gap-2 font-semibold uppercase tracking-widest text-foreground">
@@ -560,7 +549,7 @@ export default function RaceSequenceSetup() {
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {cars.length === 0 ? (
-                      <div className="col-span-full rounded-xl border-2 border-dashed border-border/60 px-4 py-8 text-center text-sm text-muted-foreground">
+                      <div className="col-span-full rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                         No cars available yet. Create the car assets first.
                       </div>
                     ) : (
@@ -574,13 +563,13 @@ export default function RaceSequenceSetup() {
                             type="button"
                             onClick={() => setForm((current) => ({ ...current, carId: car.id }))}
                             className={cn(
-                              "relative rounded-xl border-2 p-4 text-left transition-all duration-300 hover:scale-[1.03] active:scale-[0.97]",
+                              "relative rounded-md border p-4 text-left transition-colors",
                               getCardTone(selected),
                               selected ? "border-primary/40" : "border-border/40"
                             )}
                           >
                             {selected && (
-                              <div className="absolute -top-2 -right-2 rounded-full bg-primary p-1 animate-in fade-in zoom-in duration-300">
+                              <div className="absolute right-3 top-3 rounded-full bg-primary p-1">
                                 <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                               </div>
                             )}
@@ -624,18 +613,18 @@ export default function RaceSequenceSetup() {
           </div>
 
           {/* Compound Strategy Card */}
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <Card className="border-border/40 bg-card/80 backdrop-blur-sm shadow-xl shadow-primary/5 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300">
+          <div>
+            <Card className="rounded-lg border-border bg-card shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
+                    <CardTitle className="flex items-center gap-2 text-lg">
                       <Gauge className="h-6 w-6 text-primary" />
                       Compound Strategy
                     </CardTitle>
                     <CardDescription>Select the tire compounds that will be tracked during the sequence.</CardDescription>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary backdrop-blur-sm">
+                  <Badge variant="outline" className="rounded-md border-primary/30 bg-primary/10 px-2 py-1 text-primary">
                     Step 4
                   </Badge>
                 </div>
@@ -651,9 +640,9 @@ export default function RaceSequenceSetup() {
                         type="button"
                         onClick={() => toggleCompound(compound)}
                         className={cn(
-                          "rounded-full border-2 px-5 py-2.5 text-xs font-semibold uppercase tracking-widest transition-all duration-300 hover:scale-[1.05] active:scale-[0.95]",
+                          "rounded-md border px-4 py-2 text-xs font-semibold uppercase tracking-widest transition-colors",
                           selected
-                            ? "border-primary/40 bg-primary/20 text-primary shadow-lg shadow-primary/20"
+                            ? "border-primary/50 bg-primary/10 text-primary"
                             : "border-border/60 bg-transparent text-muted-foreground hover:border-primary/30 hover:text-foreground"
                         )}
                       >
@@ -663,7 +652,7 @@ export default function RaceSequenceSetup() {
                   })}
                 </div>
 
-                <div className="mt-4 rounded-xl border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent p-4 animate-in fade-in duration-500">
+                <div className="mt-4 rounded-md border border-primary/25 bg-primary/5 p-4">
                   <p className="text-sm text-muted-foreground">
                     Selected compounds: <span className="font-mono font-semibold text-foreground">{form.selectedCompounds.join(", ")}</span>
                   </p>
@@ -673,19 +662,19 @@ export default function RaceSequenceSetup() {
           </div>
 
           {/* Car Configuration Card */}
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <Card className="border-border/40 bg-card/80 backdrop-blur-sm shadow-xl shadow-primary/5 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300">
+          <div>
+            <Card className="rounded-lg border-border bg-card shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
+                    <CardTitle className="flex items-center gap-2 text-lg">
                       <Settings2 className="h-6 w-6 text-primary" />
                       Car Configuration
                     </CardTitle>
                     <CardDescription>Load the selected car default setup and adjust the key setup values before initiation.</CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary backdrop-blur-sm">
+                    <Badge variant="outline" className="rounded-md border-primary/30 bg-primary/10 px-2 py-1 text-primary">
                       Step 6
                     </Badge>
                     <Button 
@@ -693,7 +682,7 @@ export default function RaceSequenceSetup() {
                       variant="outline" 
                       size="sm" 
                       onClick={loadCarDefaults} 
-                      className="gap-2 border-primary/30 hover:bg-primary/10 transition-all duration-300 hover:scale-[1.02]"
+                      className="gap-2 border-primary/30 hover:bg-primary/10"
                     >
                       <RefreshCcw className="h-3.5 w-3.5" />
                       Load Defaults
@@ -756,29 +745,29 @@ export default function RaceSequenceSetup() {
           </div>
 
           {/* Execution Card */}
-          <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
-            <Card className="border-border/40 bg-card/80 backdrop-blur-sm shadow-xl shadow-primary/5 hover:shadow-2xl hover:shadow-primary/10 transition-all duration-300">
+          <div>
+            <Card className="rounded-lg border-border bg-card shadow-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
+                    <CardTitle className="flex items-center gap-2 text-lg">
                       <Zap className="h-6 w-6 text-primary" />
                       Execution
                     </CardTitle>
                     <CardDescription>Save the draft or initiate the configured sequence for the selected session.</CardDescription>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-primary/30 bg-primary/10 text-primary backdrop-blur-sm">
+                  <Badge variant="outline" className="rounded-md border-primary/30 bg-primary/10 px-2 py-1 text-primary">
                     Step 7
                   </Badge>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-3">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="gap-2 border-primary/30 hover:bg-primary/10 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" 
-                    onClick={saveDraft} 
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2 border-primary/30 hover:bg-primary/10"
+                    onClick={saveDraft}
                     disabled={!canSubmit || isSubmitting}
                   >
                     <RefreshCcw className="h-4 w-4" />
@@ -786,7 +775,7 @@ export default function RaceSequenceSetup() {
                   </Button>
                   <Button 
                     type="button" 
-                    className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/30 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" 
+                    className="gap-2 shadow-sm"
                     onClick={initiateSequence} 
                     disabled={!canSubmit || isSubmitting}
                   >
@@ -796,18 +785,18 @@ export default function RaceSequenceSetup() {
                 </div>
 
                 {!canSubmit && (
-                  <div className="rounded-xl border-2 border-dashed border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground animate-in fade-in duration-500">
+                  <div className="rounded-md border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                     Complete the required selections before saving or initiating the sequence.
                   </div>
                 )}
 
                 {feedback && (
-                  <div className="rounded-xl border-2 border-primary/30 bg-primary/10 p-4 text-sm text-primary animate-in slide-in-from-top-4 duration-300">
+                  <div className="rounded-md border border-primary/30 bg-primary/10 p-4 text-sm text-primary">
                     {feedback}
                   </div>
                 )}
                 {error && (
-                  <div className="rounded-xl border-2 border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive animate-in slide-in-from-top-4 duration-300">
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                     {error}
                   </div>
                 )}
@@ -818,10 +807,10 @@ export default function RaceSequenceSetup() {
 
         {/* Sidebar */}
         <aside className="space-y-6 xl:sticky xl:top-6 xl:self-start">
-          <div className="animate-in fade-in slide-in-from-right-8 duration-700">
-            <Card className="border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-background shadow-xl shadow-primary/10">
+          <div>
+            <Card className="rounded-lg border-primary/30 bg-card shadow-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2 text-2xl">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Trophy className="h-6 w-6 text-primary" />
                   Sequence Summary
                 </CardTitle>
@@ -868,9 +857,9 @@ export default function RaceSequenceSetup() {
 
                 <Separator className="border-border/40" />
 
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-4 transition-all duration-200 hover:border-sky-400/30">
+                <div className="rounded-md border border-border bg-muted/30 p-4">
                   <div className="flex items-center gap-2 font-semibold uppercase tracking-widest text-muted-foreground">
-                    <CloudRain className="h-4 w-4 text-sky-300" />
+                    <CloudRain className="h-4 w-4 text-primary" />
                     Weather Snapshot
                   </div>
                   <p className="mt-2 font-mono text-lg font-bold text-foreground">{currentWeather || "Select a circuit to load the weather briefing."}</p>

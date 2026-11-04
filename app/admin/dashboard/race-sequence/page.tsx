@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 type NavItem =
   | { name: "Dashboard"; icon: typeof LayoutDashboard; href: string }
   | { name: "Race Seq"; icon: typeof Flag }
-  | { name: "Strategy Matrix"; icon: typeof BrainCircuit }
+  | { name: "Strategy Matrix"; icon: typeof BrainCircuit; href: string }
   | { name: "Weather Radar"; icon: typeof Map }
   | { name: "Car Vitals"; icon: typeof Car }
   | { name: "Asset Management"; icon: typeof Package; href: string }
@@ -31,7 +31,7 @@ export default function RaceSequencePage() {
   const navItems: NavItem[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
     { name: "Race Seq", icon: Flag },
-    { name: "Strategy Matrix", icon: BrainCircuit },
+    { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
     { name: "Weather Radar", icon: Map },
     { name: "Car Vitals", icon: Car },
     { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },
