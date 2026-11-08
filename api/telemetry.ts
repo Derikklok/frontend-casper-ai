@@ -72,7 +72,39 @@ type NormalizedTelemetryResponse = {
   data?: NormalizedTelemetryRecord[]
 }
 
+export type NormalizeResponse = {
+  status: string
+  result: {
+    scanned_rows: number
+    inserted_rows: number
+  }
+}
+
+/**
+ * Executes the POST /telemetry/normalize endpoint.
+ */
+export async function normalizeTelemetry(limit = 1000) {
+  const response = await telemetryApiInstance.post<NormalizeResponse>(
+    "/telemetry/normalize",
+    null,
+    { params: { limit } }
+  )
+  return response.data
+}
+
+/**
+ * Normalizes pending raw logs first, then fetches the normalized data.
+ */
 export async function getNormalizedTelemetry() {
+  // 1. Run normalization first
+  try {
+    await normalizeTelemetry()
+  } catch (error) {
+    // Log error, but proceed to fetch existing normalized data rather than breaking the UI
+    console.warn("Telemetry normalization warning:", error)
+  }
+
+  // 2. Fetch the normalized telemetry records
   const response = await telemetryApiInstance.get<NormalizedTelemetryResponse>(
     "/telemetry/normalized"
   )
