@@ -1,516 +1,502 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import Cookies from "js-cookie"
-import TeamSetup from "@/components/team-management/teamSetup"
-import RaceSequenceSetup from "@/components/race-sequence-management/raceSequenceSetup"
+import {
+  ChevronRight,
+  RadioTower,
+  SlidersHorizontal,
+} from "lucide-react"
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+
+import { useGetCircuits, useGetDrivers } from "@/api/endpoints/asset-controller/asset-controller"
 import { useGetActiveSequence } from "@/api/endpoints/race-sequence-controller/race-sequence-controller"
-import { useGetDrivers, useGetCircuits } from "@/api/endpoints/asset-controller/asset-controller"
+import { seedOf, trackPath, TrackGlyph, Tyre } from "@/components/race-sequence-management/visuals"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { 
-  AlertTriangle, BrainCircuit, Car, CheckCircle2,
-  Flag, Gauge, LayoutDashboard, LogOut, Map, Package, RadioTower, Settings, 
-  ThermometerSun, Timer, User, Zap, Check, X
-} from "lucide-react"
-import { 
-  ResponsiveContainer, XAxis, YAxis, 
-  CartesianGrid, Tooltip, Area, AreaChart 
-} from "recharts"
+import { cn } from "@/lib/utils"
 
-// Mock Data for Telemetry Chart
+/* ------------------------------ sample data ------------------------------ */
+// Deterministic so server and client render the same chart.
 const telemetryData = Array.from({ length: 40 }).map((_, i) => ({
   distance: i * 50,
-  speed: 100 + Math.random() * 150 + (i > 10 && i < 20 ? 80 : 0) - (i > 30 ? 120 : 0),
-  throttle: Math.random() > 0.5 ? 100 : Math.random() * 50,
+  speed: Math.round(180 + Math.sin(i / 3) * 60 + (i > 10 && i < 20 ? 60 : 0) - (i > 30 ? 90 : 0)),
 }))
 
 const timingData = [
-  { p: 1, name: "VER", gap: "LEADER", tire: "M", laps: 12 },
-  { p: 2, name: "NOR", gap: "+1.243", tire: "M", laps: 12 },
-  { p: 3, name: "GHO (Us)", gap: "+3.104", tire: "S", laps: 18, highlight: true },
-  { p: 4, name: "LEC", gap: "+4.882", tire: "H", laps: 4 },
-  { p: 5, name: "PIA", gap: "+5.120", tire: "M", laps: 12 },
+  { p: 1, name: "VER", gap: "Leader", tire: "Medium" },
+  { p: 2, name: "NOR", gap: "+1.243", tire: "Medium" },
+  { p: 3, name: "GHO", gap: "+3.104", tire: "Soft", us: true },
+  { p: 4, name: "LEC", gap: "+4.882", tire: "Hard" },
+  { p: 5, name: "PIA", gap: "+5.120", tire: "Medium" },
 ]
 
+/* ---------------------------------- page --------------------------------- */
+
 export default function EngineerDashboard() {
-  const [navActive, setNavActive] = useState("Dashboard")
   const router = useRouter()
 
-  const handleExit = () => {
-    Cookies.remove("auth_token")
-    Cookies.remove("user_details")
-    router.push("/auth/login")
-  }
-
-  const navItems = [
-    { name: "Dashboard", icon: LayoutDashboard },
-    { name: "Race Seq", icon: Flag },
-    { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
-    { name: "Weather Radar", icon: Map },
-    { name: "Car Vitals", icon: Car },
-    { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },
-    { name: "Settings", icon: Settings },
-  ]
-
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
-      
-      {/* 1. Global Navigation Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background px-6 py-3">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2 pr-6 border-r border-border/50">
-            <BrainCircuit className="h-5 w-5 text-primary" />
-            <span className="font-bitcount text-lg font-bold tracking-[0.18em] text-foreground">
-              CASPER<span className="text-primary">.AI</span>
-            </span>
-          </div>
-          
-          {/* Main Nav Links */}
-          <nav className="hidden lg:flex items-center gap-1 font-quicksand text-xs font-semibold uppercase tracking-widest">
-            {navItems.map((item) => (
-              <button
-                key={item.name}
-                onClick={() => "href" in item && item.href ? router.push(item.href) : setNavActive(item.name)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
-                  navActive === item.name 
-                    ? "bg-primary/10 text-primary" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <item.icon className="h-3.5 w-3.5" />
-                {item.name}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Top Right User & Status */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-muted/50 border border-border">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-              </span>
-              SYS: ONLINE
-            </div>
-            <div className="px-3 py-1.5 rounded bg-muted/50 border border-border text-muted-foreground">
-              ENG-77X | GHOST-1
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExit}
-            className="font-quicksand gap-2 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            Exit
-          </Button>
-        </div>
-      </header>
-
-      {/* Settings View */}
-      {navActive === "Settings" && <TeamSetup onBack={() => setNavActive("Dashboard")} />}
-
-      {/* Race Sequence View */}
-      {navActive === "Race Seq" && <RaceSequenceSetup />}
-
-      {/* 2. Top Race Context Bar */}
-      {navActive !== "Settings" && navActive !== "Race Seq" && (
-      <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-border border-b border-border bg-muted/20">
-        <ContextStat icon={Flag} label="Race Status" value="GREEN FLAG" valueColor="text-green-500" />
-        <ContextStat icon={Timer} label="Current Lap" value="Lap 42 / 72" />
-        <ContextStat icon={Map} label="Track Sectors" value="S1: Clear | S2: Clear" />
-        <ContextStat icon={ThermometerSun} label="Track Temp" value="34.2 °C" />
-        <ContextStat icon={AlertTriangle} label="Rain Risk" value="12% (ETA 40m)" />
-      </div>
-      )}
-
-      {/* Main Dashboard Grid */}
-      {navActive !== "Settings" && navActive !== "Race Seq" && (
-      <main className="flex-1 p-6 overflow-auto">
-        <div className="max-w-[1600px] mx-auto grid grid-cols-1 md:grid-cols-12 gap-6">
-
-          {/* LEFT COLUMN: CASPER AI Strategy Alert (Human in the loop core focus) */}
-          <div className="md:col-span-4 flex flex-col gap-6">
-            <Card className="relative overflow-hidden border-primary/50 bg-card">
-               <div className="absolute top-0 left-0 h-1 w-full bg-primary"></div>
-               <CardHeader className="pb-2">
-                 <div className="flex justify-between items-start">
-                   <div className="flex items-center gap-2 text-primary font-bold">
-                     <Zap className="h-5 w-5 fill-primary" /> 
-                     <span className="font-heading uppercase tracking-widest text-lg">Hitl Intervention</span>
-                   </div>
-                   <Badge variant="destructive" className="animate-pulse font-mono rounded-sm">CRITICAL</Badge>
-                 </div>
-                 <CardTitle className="text-2xl font-bold mt-2">Undercut Window Open</CardTitle>
-                 <CardDescription className="font-google-flex text-base">
-                   Car 4 (LEC) tires dropping rapidly. Pitting now yields a 68% probability of track position overtake.
-                 </CardDescription>
-               </CardHeader>
-               <CardContent>
-                 <div className="grid gap-3 font-mono text-sm mb-6 mt-2">
-                   <div className="flex justify-between py-2 border-b border-border/50">
-                     <span className="text-muted-foreground">Calculated Pit Loss:</span>
-                     <span className="text-foreground font-bold">21.4s</span>
-                   </div>
-                   <div className="flex justify-between py-2 border-b border-border/50">
-                     <span className="text-muted-foreground">Estimated Gap at Exit:</span>
-                     <span className="text-green-500 font-bold">+1.2s ahead of LEC</span>
-                   </div>
-                   <div className="flex justify-between py-2">
-                     <span className="text-muted-foreground">Suggested Compound:</span>
-                     <span className="text-white bg-zinc-700 px-2 rounded font-bold">HARD (C3)</span>
-                   </div>
-                 </div>
-                 <div className="flex gap-3 w-full">
-                    <Button className="w-2/3 h-12 bg-primary hover:bg-primary/80 font-heading tracking-widest uppercase">
-                      <Check className="mr-2 h-4 w-4" /> Confirm Box
-                    </Button>
-                    <Button variant="outline" className="w-1/3 h-12 border-border/70 text-muted-foreground uppercase tracking-widest font-heading">
-                      <X className="mr-2 h-4 w-4" /> Hold
-                    </Button>
-                 </div>
-               </CardContent>
-            </Card>
-
-            {/* Tire Degradation Widget */}
-            <Card className="border-border/60 flex-1">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="font-heading text-lg">Tire Telemetry</CardTitle>
-                  <CardDescription>Soft Compound (18 Laps)</CardDescription>
-                </div>
-                <div className="h-8 w-8 rounded bg-red-500/20 flex items-center justify-center text-red-500 font-bold border border-red-500/50">
-                   S
-                </div>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-4 mt-2">
-                 <TireStat label="Front Left" wear={82} temp="110°C" color="bg-yellow-500" />
-                 <TireStat label="Front Right" wear={78} temp="108°C" color="bg-green-500" />
-                 <TireStat label="Rear Left" wear={45} temp="124°C" color="bg-primary" />
-                 <TireStat label="Rear Right" wear={42} temp="126°C" color="bg-primary" />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* MIDDLE COLUMN: Live Telemetry Graph & Core Data */}
-          <div className="md:col-span-5 flex flex-col gap-6">
-            <Card className="border-border/60 flex-1 flex flex-col">
-              <CardHeader className="pb-0">
-                <CardTitle className="font-heading text-lg flex items-center justify-between">
-                  <span>Speed Trace vs Track Distance</span>
-                <Badge variant="outline" className="border-primary/50 font-mono text-xs text-primary">LIVE <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span></Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex-1 pt-4">
-                <ResponsiveContainer width="100%" height={300}>
-                  <AreaChart data={telemetryData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorSpeed" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="distance" stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: 'monospace'}} />
-                    <YAxis stroke="rgba(255,255,255,0.2)" tick={{fill: 'rgba(255,255,255,0.4)', fontSize: 10, fontFamily: 'monospace'}} domain={[0, 350]} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,0,0,0.3)', borderRadius: '8px' }}
-                      itemStyle={{ fontFamily: 'monospace', color: 'white' }}
-                      labelStyle={{ display: 'none' }}
-                    />
-                    <Area type="monotone" dataKey="speed" stroke="var(--color-primary)" strokeWidth={2} fillOpacity={1} fill="url(#colorSpeed)" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Powertrain / ERS */}
-            <div className="grid grid-cols-2 gap-6">
-              <Card className="border-border/60">
-                <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-                  <Gauge className="h-8 w-8 text-muted-foreground mb-2" />
-                  <span className="font-quicksand text-xs uppercase tracking-widest text-muted-foreground mb-1">ERS Deployed</span>
-                  <span className="font-heading text-3xl font-bold">42<span className="text-lg text-muted-foreground">%</span></span>
-                  <div className="w-full bg-secondary h-2 mt-3 rounded-full overflow-hidden">
-                    <div className="bg-yellow-400 h-full w-[42%]"></div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="border-border/60">
-                <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-                  <BatteryIcon level={88} />
-                  <span className="font-quicksand text-xs uppercase tracking-widest text-muted-foreground mb-1 mt-2">SoC (Charge)</span>
-                  <span className="font-heading text-3xl font-bold">88<span className="text-lg text-muted-foreground">%</span></span>
-                  <div className="w-full bg-secondary h-2 mt-3 rounded-full overflow-hidden">
-                    <div className="bg-green-500 h-full w-[88%]"></div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* RIGHT COLUMN: Timing Tower */}
-          <div className="md:col-span-3">
-             <Card className="border-border/60 h-full flex flex-col">
-              <CardHeader className="pb-3 border-b border-border/50">
-                <CardTitle className="font-heading text-lg">Timing Tower</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 flex-1 overflow-auto">
-                 <div className="grid grid-cols-[30px_1fr_60px_40px] text-xs font-quicksand uppercase tracking-wider text-muted-foreground p-3 border-b border-border/20">
-                   <div>P</div>
-                   <div>Driver</div>
-                   <div className="text-right">Gap</div>
-                   <div className="text-right">Tyre</div>
-                 </div>
-                 <div className="divide-y divide-border/20">
-                   {timingData.map((driver) => (
-                     <div 
-                      key={driver.p} 
-                      className={`grid grid-cols-[30px_1fr_60px_40px] items-center p-3 font-mono text-sm transition-colors hover:bg-muted/30 ${driver.highlight ? 'border-l-2 border-l-primary bg-primary/10' : ''}`}
-                     >
-                       <div className={`${driver.highlight ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{driver.p}</div>
-                       <div className="font-bold">{driver.name}</div>
-                       <div className={`text-right ${driver.gap === 'LEADER' ? 'text-muted-foreground text-xs' : ''}`}>{driver.gap}</div>
-                       <div className="text-right flex justify-end">
-                         <span className={`flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold ${
-                           driver.tire === 'S' ? 'bg-red-500 text-white' : 
-                           driver.tire === 'M' ? 'bg-yellow-500 text-black' : 'bg-gray-100 text-black'
-                         }`}>
-                           {driver.tire}
-                         </span>
-                       </div>
-                     </div>
-                   ))}
-                 </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* BOTTOM ROW: Live Data Widgets */}
-          <div className="md:col-span-12">
-            <LiveDataWidgets />
-          </div>
-
-        </div>
-      </main>
-      )}
-    </div>
+    <main>
+      <CommandDeck onConfigure={() => router.push("/admin/dashboard/race-sequence")} />
+      <SamplePreview />
+    </main>
   )
 }
 
-// -------------------------------------------------------------
-// Helper UI Components below to keep main file clean
-// -------------------------------------------------------------
+/* ------------------------- real, data-backed section ------------------------ */
 
-function ContextStat({ icon: Icon, label, value, valueColor = "text-foreground" }: { icon: React.ElementType, label: string, value: string, valueColor?: string }) {
-  return (
-    <div className="px-6 py-3 flex items-center gap-4">
-      <div className="bg-background border border-border p-2 rounded-md">
-        <Icon className="h-5 w-5 text-muted-foreground" />
-      </div>
-      <div>
-        <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-        <p className={`font-mono text-sm font-semibold mt-0.5 ${valueColor}`}>{value}</p>
-      </div>
-    </div>
-  )
-}
-
-function TireStat({ label, wear, temp, color }: { label: string, wear: number, temp: string, color: string }) {
-  return (
-    <div className="flex flex-col gap-1 p-3 rounded-xl bg-secondary/30 border border-border/50">
-      <span className="font-quicksand text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="flex items-end justify-between font-mono mt-1">
-        <span className="text-xl font-bold">{wear}%</span>
-        <span className="text-xs text-muted-foreground mb-1">{temp}</span>
-      </div>
-      <div className="w-full bg-background border border-border/50 h-2 mt-1 rounded-full overflow-hidden">
-        <div className={`h-full ${color}`} style={{ width: `${wear}%` }}></div>
-      </div>
-    </div>
-  )
-}
-
-function BatteryIcon({ level }: { level: number }) {
-  return (
-    <div className="relative w-8 h-4 border-2 border-muted-foreground rounded-sm p-px">
-       <div className="h-full bg-foreground" style={{ width: `${level}%` }}></div>
-       <div className="absolute -right-1 top-0.75 w-0.5 h-1.5 bg-muted-foreground rounded-r-sm"></div>
-    </div>
-  )
-}
-
-function LiveDataWidgets() {
+function CommandDeck({ onConfigure }: { onConfigure: () => void }) {
   const router = useRouter()
-  const activeSeqQuery = useGetActiveSequence()
+  const [tab, setTab] = useState<"drivers" | "circuits">("drivers")
+  const seqQuery = useGetActiveSequence()
   const driversQuery = useGetDrivers()
   const circuitsQuery = useGetCircuits()
 
-  const seq = activeSeqQuery.data?.result
+  const seq = seqQuery.data?.result
   const drivers = driversQuery.data?.result ?? []
   const circuits = circuitsQuery.data?.result ?? []
+  const seqDriver = drivers.find((d) => d.id === seq?.driverId)
 
-  const statusColor: Record<string, string> = {
-    ACTIVE: "text-green-500 border-green-500/30 bg-green-500/10",
-    PLANNED: "text-yellow-500 border-yellow-500/30 bg-yellow-500/10",
-    COMPLETED: "text-muted-foreground border-border bg-muted/20",
+  const statusStyle: Record<string, string> = {
+    ACTIVE: "bg-green-500/15 text-green-500",
+    PLANNED: "bg-yellow-500/15 text-yellow-500",
+    COMPLETED: "bg-muted text-muted-foreground",
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <Card className="relative overflow-hidden border-primary/40 bg-card">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-primary" />
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
-              <Flag className="h-4 w-4 text-primary" /> Active Sequence
-            </CardTitle>
-            {seq?.status && (
-              <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded border ${statusColor[seq.status] ?? "text-muted-foreground border-border"}`}>
-                {seq.status}
-              </span>
-            )}
+    <section className="grid gap-5 p-5 lg:h-[calc(100svh-3.5rem)] lg:grid-cols-12 lg:grid-rows-1">
+      {/* Active sequence */}
+      <div className="relative flex min-h-[26rem] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:col-span-7 lg:min-h-0">
+        {seqQuery.isLoading ? (
+          <div className="flex-1 animate-pulse bg-muted/30" />
+        ) : !seq ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+            <TrackGlyph seed={seedOf("empty")} className="h-32 w-44 text-muted-foreground/30" />
+            <div>
+              <h1 className="font-heading text-2xl font-semibold">No active sequence</h1>
+              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                Choose a driver, circuit, car and tyres to open the pit wall.
+              </p>
+            </div>
+            <Button onClick={onConfigure} className="gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Set up a sequence
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          {activeSeqQuery.isLoading ? (
-            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading sequence data...</p>
-          ) : seq ? (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
-                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Driver</p>
-                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.driverName ?? seq.driverId ?? "—"}</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
-                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Circuit</p>
-                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.circuitName ?? seq.circuitId ?? "—"}</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
-                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Car</p>
-                  <p className="font-mono text-sm font-bold mt-1 text-foreground truncate">{seq.carName ?? seq.carId ?? "—"}</p>
-                </div>
-                <div className="rounded-lg border border-border/50 bg-background/60 p-3">
-                  <p className="font-quicksand text-[10px] uppercase tracking-widest text-muted-foreground">Laps</p>
-                  <p className="font-mono text-sm font-bold mt-1 text-foreground">{seq.defaultLapCount ?? "—"}</p>
+        ) : (
+          <>
+            <LiveStage
+              circuitName={seq.circuitName}
+              circuitId={seq.circuitId}
+              driverName={seq.driverName}
+              carName={seq.carName}
+              status={seq.status}
+              statusClass={statusStyle[seq.status ?? ""] ?? "bg-muted text-muted-foreground"}
+              driverNumber={seqDriver?.driverNumber}
+              totalLaps={seq.defaultLapCount ?? 50}
+            />
+
+            <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60 sm:grid-cols-4">
+              <Fact label="Laps" value={seq.defaultLapCount ?? "–"} />
+              <Fact label="Forecast" value={seq.weatherInfo ?? "–"} />
+              <Fact label="Driver" value={seq.driverName ?? "–"} />
+              <div className="px-5 py-4">
+                <p className="text-xs text-muted-foreground">Tyres</p>
+                <div className="mt-2 flex gap-1.5">
+                  {seq.selectedCompounds?.length
+                    ? seq.selectedCompounds.map((c) => <Tyre key={c} compound={c} size={26} />)
+                    : "–"}
                 </div>
               </div>
-              {seq.selectedCompounds?.length ? (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {seq.selectedCompounds.map((c) => (
-                    <span key={c} className={`text-[10px] font-bold px-2 py-0.5 rounded border font-mono ${
-                      c === "Soft" ? "bg-red-500/15 border-red-500/40 text-red-400" :
-                      c === "Medium" ? "bg-yellow-500/15 border-yellow-500/40 text-yellow-400" :
-                      c === "Hard" ? "bg-zinc-400/15 border-zinc-400/40 text-zinc-300" :
-                      c === "Wet" ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-300" :
-                      "bg-green-500/15 border-green-500/40 text-green-400"
-                    }`}>{c}</span>
-                  ))}
-                </div>
-              ) : null}
-              <Button
-                onClick={() => router.push("/admin/dashboard/pit-wall")}
-                className="w-full h-10 gap-2 bg-primary font-heading text-xs tracking-widest uppercase hover:bg-primary/90"
-              >
-                <RadioTower className="h-3.5 w-3.5" />
-                Initiate Pit Wall
+            </div>
+
+            <div className="flex flex-wrap gap-3 border-t border-border/60 p-5">
+              <Button size="lg" className="h-12 flex-1 gap-2 text-base" onClick={() => router.push("/admin/dashboard/pit-wall")}>
+                <RadioTower className="h-5 w-5" />
+                Open pit wall
+              </Button>
+              <Button size="lg" variant="outline" className="h-12 gap-2" onClick={onConfigure}>
+                <SlidersHorizontal className="h-4 w-4" />
+                Edit sequence
               </Button>
             </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
-              <Flag className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No active sequence. Configure one in Race Seq.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          </>
+        )}
+      </div>
 
-      <Card className="relative overflow-hidden border-border/60 bg-card">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-muted-foreground" />
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" /> Driver Roster
-            </CardTitle>
-              <span className="rounded border border-border/60 bg-muted/20 px-2 py-0.5 font-mono text-[10px] font-bold text-muted-foreground">
-              {driversQuery.isLoading ? "..." : `${drivers.length} REG`}
-            </span>
+      {/* Registry */}
+      <div className="flex min-h-[24rem] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:col-span-5 lg:min-h-0">
+        <div className="flex items-center justify-between border-b border-border/60 p-2">
+          <div role="tablist" className="flex gap-1">
+            {(
+              [
+                ["drivers", "Drivers", drivers.length],
+                ["circuits", "Circuits", circuits.length],
+              ] as const
+            ).map(([id, label, count]) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                  tab === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {label}
+                <span className="rounded-full bg-background px-2 text-xs tabular-nums">{count}</span>
+              </button>
+            ))}
           </div>
-        </CardHeader>
-        <CardContent>
-          {driversQuery.isLoading ? (
-            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading drivers...</p>
-          ) : drivers.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
-              <User className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No drivers registered yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
-              {drivers.map((driver) => (
-                <div key={driver.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs font-bold text-primary w-6 text-center">{driver.driverNumber ?? "—"}</span>
-                    <div>
-                      <p className="font-mono text-xs font-semibold text-foreground">{driver.broadcastName ?? driver.fullName ?? "Unknown"}</p>
-                      <p className="font-quicksand text-[10px] text-muted-foreground uppercase tracking-wider">{driver.countryCode ?? "—"} · {driver.acronym ?? "---"}</p>
-                    </div>
-                  </div>
-                  {seq?.driverId === driver.id && (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={() => router.push("/admin/dashboard/assets")}>
+            Manage
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
 
-      <Card className="relative overflow-hidden border-border/60 bg-card">
-        <div className="absolute top-0 left-0 h-0.5 w-full bg-amber-500" />
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="font-heading text-sm uppercase tracking-widest flex items-center gap-2">
-              <Map className="h-4 w-4 text-amber-400" /> Circuit Registry
-            </CardTitle>
-            <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400">
-              {circuitsQuery.isLoading ? "..." : `${circuits.length} TRK`}
-            </span>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {circuitsQuery.isLoading ? (
-            <p className="text-xs text-muted-foreground font-mono animate-pulse">Loading circuits...</p>
-          ) : circuits.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/50 bg-muted/10 p-4 text-center">
-              <Map className="h-6 w-6 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No circuits registered yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-50 overflow-y-auto pr-1">
-              {circuits.map((circuit) => (
-                <div key={circuit.id} className="flex items-center justify-between rounded-lg border border-border/40 bg-background/50 px-3 py-2 hover:bg-muted/30 transition-colors">
-                  <div>
-                    <p className="font-mono text-xs font-semibold text-foreground">{circuit.name ?? "Unknown"}</p>
-                    <p className="font-quicksand text-[10px] text-muted-foreground uppercase tracking-wider">
-                      {circuit.country ?? "—"} · {circuit.length ? `${circuit.length} km` : "—"} · {circuit.numberOfCorners ?? "—"} corners
+        <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-2">
+          {tab === "drivers" ? (
+            driversQuery.isLoading ? (
+              <ListSkeleton />
+            ) : drivers.length === 0 ? (
+              <Empty text="No drivers yet. Add them under Asset Management." />
+            ) : (
+              drivers.map((d) => (
+                <Row key={d.id} active={seq?.driverId === d.id}>
+                  <span className="w-10 text-right font-heading text-2xl font-bold tabular-nums">{d.driverNumber ?? "–"}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{d.fullName ?? d.broadcastName ?? "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {d.acronym ?? "---"}
+                      {d.countryCode ? `, ${d.countryCode}` : ""}
                     </p>
                   </div>
-                  {seq?.circuitId === circuit.id && (
-                    <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                  )}
+                </Row>
+              ))
+            )
+          ) : circuitsQuery.isLoading ? (
+            <ListSkeleton />
+          ) : circuits.length === 0 ? (
+            <Empty text="No circuits yet. Add them under Asset Management." />
+          ) : (
+            circuits.map((c) => (
+              <Row key={c.id} active={seq?.circuitId === c.id}>
+                <TrackGlyph seed={seedOf(c.id ?? c.name ?? "")} className="h-10 w-12 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{c.name ?? "Unknown"}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {c.country ?? "–"}
+                    {c.length ? `, ${c.length} km` : ""}
+                    {c.numberOfCorners ? `, ${c.numberOfCorners} corners` : ""}
+                  </p>
                 </div>
+              </Row>
+            ))
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ------------------------- simulated live telemetry ------------------------- */
+
+type Telemetry = { speed: number; gear: number; throttle: number; brake: number; lap: number; sector: number; lastLap: string; trace: number[] }
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+const LAP_MS = 20000 // a demo lap takes 20 s so the motion is easy to read
+
+function formatLap(seconds: number) {
+  const m = Math.floor(seconds / 60)
+  return `${m}:${(seconds - m * 60).toFixed(3).padStart(6, "0")}`
+}
+
+/** Drives a car marker around the circuit outline and produces a plausible telemetry stream. */
+function useSimulatedTelemetry(seed: number, totalLaps: number) {
+  const pathRef = useRef<SVGPathElement>(null)
+  const dotRef = useRef<SVGCircleElement>(null)
+  const [t, setT] = useState<Telemetry>({ speed: 0, gear: 1, throttle: 0, brake: 0, lap: 1, sector: 1, lastLap: "–", trace: [] })
+
+  useEffect(() => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const phase = (seed % 628) / 100
+    const speedAt = (p: number) =>
+      clamp(205 + 105 * Math.sin(2 * Math.PI * p * 4 + phase) + 35 * Math.sin(2 * Math.PI * p * 9 + phase * 2), 78, 338)
+    const start = performance.now()
+    const trace: number[] = []
+    let lastTick = 0
+    let raf = 0
+
+    const frame = (now: number) => {
+      const elapsed = now - start
+      const p = (elapsed % LAP_MS) / LAP_MS
+      const lapIndex = Math.floor(elapsed / LAP_MS)
+
+      const path = pathRef.current
+      const dot = dotRef.current
+      if (path && dot) {
+        const pt = path.getPointAtLength(p * path.getTotalLength())
+        dot.setAttribute("cx", pt.x.toFixed(2))
+        dot.setAttribute("cy", pt.y.toFixed(2))
+      }
+
+      if (now - lastTick > (reduce ? 1000 : 100)) {
+        lastTick = now
+        const speed = speedAt(p) + (Math.random() - 0.5) * 4
+        const trend = speedAt(p + 0.01) - speedAt(p)
+        const brake = trend < -6 ? clamp(Math.abs(trend) * 4, 30, 100) : 0
+        const throttle = brake > 0 ? 0 : trend > 6 ? 100 : 72 + Math.random() * 20
+        trace.push(speed)
+        if (trace.length > 60) trace.shift()
+        setT({
+          speed: Math.round(speed),
+          gear: clamp(Math.floor(speed / 42) + 1, 2, 8),
+          throttle: Math.round(throttle),
+          brake: Math.round(brake),
+          lap: (lapIndex % Math.max(totalLaps, 1)) + 1,
+          sector: Math.min(3, Math.floor(p * 3) + 1),
+          lastLap: lapIndex > 0 ? formatLap(87 + (((lapIndex * 7919) % 100) / 100) * 1.4) : "–",
+          trace: [...trace],
+        })
+      }
+      raf = requestAnimationFrame(frame)
+    }
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [seed, totalLaps])
+
+  return { pathRef, dotRef, t }
+}
+
+function LiveStage(props: {
+  circuitName?: string | null
+  circuitId?: string | null
+  driverName?: string | null
+  carName?: string | null
+  status?: string | null
+  statusClass: string
+  driverNumber?: number | string | null
+  totalLaps: number
+}) {
+  const seed = seedOf(props.circuitId ?? "empty")
+  const d = trackPath(seed)
+  const { pathRef, dotRef, t } = useSimulatedTelemetry(seed, props.totalLaps)
+  const spark = t.trace.map((v, i) => `${((i * 100) / 59).toFixed(1)},${(30 - (v / 340) * 28).toFixed(1)}`).join(" ")
+
+  return (
+    <div className="relative flex flex-1 flex-col overflow-hidden bg-gradient-to-br from-primary/15 via-transparent to-transparent p-7">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Active sequence</p>
+        {props.status && <Badge className={cn("rounded-md border-0", props.statusClass)}>{props.status}</Badge>}
+      </div>
+      <h1 className="mt-3 max-w-md font-heading text-4xl font-semibold leading-tight xl:text-5xl">
+        {props.circuitName ?? "Circuit not set"}
+      </h1>
+      <p className="mt-2 text-muted-foreground">
+        {props.driverName ?? "Driver not set"} in {props.carName ?? "car not set"}
+      </p>
+
+      {/* Track with moving car */}
+      <svg
+        viewBox="0 0 100 100"
+        fill="none"
+        aria-hidden
+        className="pointer-events-none absolute -right-4 top-4 h-[80%] max-h-96 w-1/2 text-primary"
+      >
+        <path d={d} stroke="currentColor" strokeOpacity={0.22} strokeWidth={9} strokeLinejoin="round" />
+        <path ref={pathRef} d={d} stroke="currentColor" strokeWidth={2.5} strokeLinejoin="round" />
+        <circle ref={dotRef} r={3.6} fill="white" stroke="currentColor" strokeWidth={2} cx={-10} cy={-10} />
+      </svg>
+      {props.driverNumber != null && (
+        <span className="pointer-events-none absolute bottom-2 right-6 font-heading text-[7rem] font-bold leading-none tabular-nums text-foreground/10 xl:text-[9rem]">
+          {props.driverNumber}
+        </span>
+      )}
+
+      {/* Telemetry readout */}
+      <div className="relative mt-auto pt-8">
+        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:hidden" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+          Live preview, simulated data
+        </div>
+
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+          <div>
+            <p className="font-heading text-6xl font-bold leading-none tabular-nums xl:text-7xl" aria-label={`Speed ${t.speed} kilometres per hour`}>
+              {t.speed}
+              <span className="ml-2 text-base font-normal text-muted-foreground">km/h</span>
+            </p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">Gear</p>
+            <p className="font-heading text-4xl font-bold tabular-nums">{t.gear}</p>
+          </div>
+          <div className="w-28 space-y-2 text-xs text-muted-foreground">
+            <Meter label="Throttle" value={t.throttle} className="bg-green-500" />
+            <Meter label="Brake" value={t.brake} className="bg-red-500" />
+          </div>
+          <div className="text-sm">
+            <p className="tabular-nums">
+              <span className="text-muted-foreground">Lap </span>
+              {t.lap}
+              <span className="text-muted-foreground"> / {props.totalLaps}</span>
+            </p>
+            <p className="tabular-nums">
+              <span className="text-muted-foreground">Last </span>
+              {t.lastLap}
+            </p>
+            <div className="mt-1.5 flex gap-1" aria-label={`Sector ${t.sector}`}>
+              {[1, 2, 3].map((s) => (
+                <span key={s} className={cn("h-1.5 w-8 rounded-full", s === t.sector ? "bg-primary" : s < t.sector ? "bg-primary/40" : "bg-muted")} />
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+
+        <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-5 h-12 w-full max-w-md text-primary" aria-hidden>
+          <polyline points={spark} fill="none" stroke="currentColor" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function Meter({ label, value, className }: { label: string; value: number; className: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex justify-between">
+        <span>{label}</span>
+        <span className="tabular-nums">{value}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full rounded-full transition-[width] duration-100", className)} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function Fact({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="min-w-0 px-5 py-4">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate font-heading text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  )
+}
+
+function Row({ active, children }: { active: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/50",
+        active && "bg-primary/10 ring-1 ring-primary/40"
+      )}
+    >
+      {children}
+      {active && <span className="shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">In sequence</span>}
+    </div>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-2">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/40" />
+      ))}
+    </div>
+  )
+}
+
+function Empty({ text }: { text: string }) {
+  return <p className="m-2 rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">{text}</p>
+}
+
+/* ----------------------- sample preview (not live data) ---------------------- */
+
+function SamplePreview() {
+  return (
+    <section className="border-t border-border/60 px-5 pb-10 pt-8">
+      <div className="mx-auto max-w-[1600px]">
+        <div className="mb-5 flex items-baseline gap-3">
+          <h2 className="font-heading text-xl font-semibold">Pit wall preview</h2>
+          <p className="text-sm text-muted-foreground">Sample data. Live telemetry is on the pit wall.</p>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-12">
+          <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-5">
+            <p className="font-heading text-lg font-semibold">Undercut window open</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              LEC’s tyres are dropping off. Pitting now gives a 68% chance of taking the position.
+            </p>
+            <dl className="mt-4 divide-y divide-border/60 text-sm">
+              <PreviewRow label="Pit loss" value="21.4 s" />
+              <PreviewRow label="Gap at exit" value="+1.2 s ahead of LEC" />
+              <PreviewRow label="Suggested tyre" value={<Tyre compound="Hard" size={24} />} />
+            </dl>
+            <div className="mt-5 flex gap-3">
+              <Button className="h-11 flex-[2]">Confirm box</Button>
+              <Button variant="outline" className="h-11 flex-1">
+                Hold
+              </Button>
+            </div>
+          </div>
+
+          <div className="min-w-0 rounded-2xl border border-border bg-card p-5 lg:col-span-4">
+            <p className="font-heading text-lg font-semibold">Speed trace</p>
+            <div className="mt-3 h-[210px] min-w-0">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={210}>
+                <AreaChart data={telemetryData} margin={{ top: 8, right: 0, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="speedFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+                  <XAxis dataKey="distance" tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }} stroke="rgba(255,255,255,0.2)" />
+                  <YAxis domain={[0, 350]} tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }} stroke="rgba(255,255,255,0.2)" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
+                    labelStyle={{ display: "none" }}
+                  />
+                  <Area type="monotone" dataKey="speed" stroke="var(--color-primary)" strokeWidth={2} fill="url(#speedFill)" isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card lg:col-span-3">
+            <p className="border-b border-border/60 p-5 pb-4 font-heading text-lg font-semibold">Timing</p>
+            <ul className="divide-y divide-border/50 text-sm">
+              {timingData.map((d) => (
+                <li
+                  key={d.p}
+                  className={cn("flex items-center gap-3 px-5 py-2.5", d.us && "bg-primary/10")}
+                >
+                  <span className="w-4 tabular-nums text-muted-foreground">{d.p}</span>
+                  <span className="flex-1 font-medium">{d.name}</span>
+                  <span className="tabular-nums text-muted-foreground">{d.gap}</span>
+                  <Tyre compound={d.tire} size={20} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function PreviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-medium">{value}</dd>
     </div>
   )
 }

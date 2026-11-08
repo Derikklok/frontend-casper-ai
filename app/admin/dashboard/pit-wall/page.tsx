@@ -1,23 +1,14 @@
 "use client"
 
-import { useMemo, useState, type ElementType } from "react"
-import { useRouter } from "next/navigation"
-import Cookies from "js-cookie"
+import { useMemo, useState } from "react"
 import {
   Activity,
   AlertTriangle,
-  BrainCircuit,
   Car,
   CheckCircle2,
   Clock3,
-  Flag,
   Fuel,
-  LayoutDashboard,
-  LogOut,
   Map,
-  Package,
-  RadioTower,
-  Settings,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
@@ -37,7 +28,6 @@ import {
   YAxis,
 } from "recharts"
 
-import TeamSetup from "@/components/team-management/teamSetup"
 import TelemetryDisplay from "@/components/pit-wall/TelemetryDisplay"
 import AiStrategyPanel from "@/components/pit-wall/AiStrategyPanel"
 import InitialStartegy from "@/components/initial-strategy/InitialStartegy"
@@ -64,16 +54,6 @@ type SessionType = "Practice 1" | "Practice 2" | "Qualifying" | "Race"
 type StrategyMode = "Management" | "Normal" | "Push"
 type TrackStatus = "Green Flag" | "VSC" | "Safety Car"
 type StrategyDecision = "Pending" | "Approved" | "Rejected"
-type NavName =
-  | "Pit Wall"
-  | "Dashboard"
-  | "Race Seq"
-  | "Strategy Matrix"
-  | "Weather Radar"
-  | "Car Vitals"
-  | "Asset Management"
-  | "Settings"
-
 const SESSION_OPTIONS: SessionType[] = [
   "Practice 1",
   "Practice 2",
@@ -159,7 +139,6 @@ function TelemetryItem({
 }
 
 export default function PitWallPage() {
-  const [navActive, setNavActive] = useState<NavName>("Pit Wall")
   const [session, setSession] = useState<SessionType>("Race")
   const [strategyMode, setStrategyMode] = useState<StrategyMode>("Normal")
   const [trackStatus, setTrackStatus] = useState<TrackStatus>("Green Flag")
@@ -184,14 +163,6 @@ export default function PitWallPage() {
   // AI Output State
   const [predictedPaceVector, setPredictedPaceVector] = useState<number[]>([])
   // const [aiAnalysis, setAiAnalysis] = useState<any>(null) // Will use in Part 2
-
-  const router = useRouter()
-
-  const handleExit = () => {
-    Cookies.remove("auth_token")
-    Cookies.remove("user_details")
-    router.push("/auth/login")
-  }
 
   // ------------------------------------------------------------------
   // Mock Live Telemetry Ribbon
@@ -223,27 +194,6 @@ export default function PitWallPage() {
     () => cars.find((car) => car.id === activeSequence?.carId) ?? cars[0],
     [activeSequence?.carId, cars]
   )
-
-  // const handleExit = () => {
-  //   Cookies.remove("auth_token")
-  //   Cookies.remove("user_details")
-  //   router.push("/auth/login")
-  // }
-
-  const navItems: { name: NavName; icon: ElementType; href?: string }[] = [
-    { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
-    { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
-    { name: "Pit Wall", icon: RadioTower },
-    { name: "Strategy Matrix", icon: BrainCircuit, href: "/admin/dashboard/strategy-matrix" },
-    { name: "Weather Radar", icon: Map },
-    { name: "Car Vitals", icon: Car },
-    {
-      name: "Asset Management",
-      icon: Package,
-      href: "/admin/dashboard/assets",
-    },
-    { name: "Settings", icon: Settings },
-  ]
 
   const aiRecommendation = useMemo(() => {
     const modeText =
@@ -281,64 +231,7 @@ export default function PitWallPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-background text-foreground">
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border/60 bg-background px-6 py-3">
-        <div className="flex items-center gap-6">
-          <button
-            onClick={() => router.push("/admin/dashboard")}
-            className="flex items-center gap-2 border-r border-border/50 pr-6 transition-opacity hover:opacity-80"
-          >
-            <BrainCircuit className="h-5 w-5 text-primary" />
-            <span className="font-bitcount text-lg font-bold tracking-[0.18em] text-foreground">
-              CASPER<span className="text-primary">.AI</span>
-            </span>
-          </button>
-
-          <nav className="font-quicksand hidden items-center gap-1 text-xs font-semibold tracking-widest uppercase lg:flex">
-            {navItems.map((item) => (
-              <button
-                key={item.name}
-                onClick={() =>
-                  item.href ? router.push(item.href) : setNavActive(item.name)
-                }
-                className={`flex items-center gap-2 rounded-md px-4 py-2 transition-colors ${
-                  navActive === item.name
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <item.icon className="h-3.5 w-3.5" />
-                {item.name}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 font-mono text-xs">
-            <div className="flex items-center gap-1.5 rounded-sm border border-white/10 bg-slate-900/70 px-3 py-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
-              </span>
-              SOPHIE V6: ONLINE
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExit}
-            className="font-quicksand gap-2 border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Exit
-          </Button>
-        </div>
-      </header>
-
-      {navActive === "Settings" ? (
-        <TeamSetup onBack={() => setNavActive("Pit Wall")} />
-      ) : (
-        <main className="pit-wall-shell relative flex-1 overflow-auto">
+    <main className="pit-wall-shell relative min-h-full overflow-auto">
           <div className="pointer-events-none absolute inset-0">
           </div>
 
@@ -529,8 +422,8 @@ export default function PitWallPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="h-70 rounded-xl border border-border/60 bg-background/60 p-2">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-[280px] min-w-0 rounded-xl border border-border/60 bg-background/60 p-2">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={260}>
                         <AreaChart
                           data={telemetryData}
                           margin={{ top: 10, right: 8, left: -20, bottom: 0 }}
@@ -987,8 +880,6 @@ export default function PitWallPage() {
               </Card>
             </section>
           </div>
-        </main>
-      )}
-    </div>
+    </main>
   )
 }

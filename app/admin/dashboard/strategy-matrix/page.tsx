@@ -1,8 +1,6 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
-import Cookies from "js-cookie"
 import {
   Activity,
   AlertTriangle,
@@ -12,12 +10,8 @@ import {
   Clock3,
   Flag,
   Gauge,
-  LayoutDashboard,
-  LogOut,
   Map,
-  Package,
   RefreshCcw,
-  Settings,
   ShieldCheck,
   SlidersHorizontal,
   ThermometerSun,
@@ -43,20 +37,6 @@ import {
 import { cn } from "@/lib/utils"
 
 type Filter = "ALL" | "STAY_OUT" | "BOX_BOX"
-
-const navigation = [
-  { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
-  { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
-  {
-    name: "Strategy Matrix",
-    icon: BrainCircuit,
-    href: "/admin/dashboard/strategy-matrix",
-  },
-  { name: "Weather Radar", icon: Map },
-  { name: "Car Vitals", icon: Activity },
-  { name: "Asset Management", icon: Package, href: "/admin/dashboard/assets" },
-  { name: "Settings", icon: Settings },
-]
 
 function formatTime(value?: string) {
   if (!value) return "--"
@@ -174,7 +154,6 @@ function DecisionRow({
 }
 
 export default function StrategyMatrixPage() {
-  const router = useRouter()
   const [filter, setFilter] = useState<Filter>("ALL")
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const telemetryQuery = useGetNormalizedTelemetry()
@@ -200,61 +179,9 @@ export default function StrategyMatrixPage() {
   const confidence =
     latest?.prediction?.meta?.decision_envelope?.confidence ?? 0
 
-  const handleExit = () => {
-    Cookies.remove("auth_token")
-    Cookies.remove("user_details")
-    router.push("/auth/login")
-  }
-
   return (
-    <div className="min-h-screen bg-muted/20 text-foreground">
-      <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border bg-background/95 px-6 py-3 backdrop-blur-md">
-        <button
-          onClick={() => router.push("/admin/dashboard")}
-          className="flex items-center gap-2 border-r border-border pr-6"
-        >
-          <BrainCircuit className="size-5 text-primary" />
-          <span className="font-bitcount text-lg font-bold tracking-[0.18em]">
-            CASPER<span className="text-primary">.AI</span>
-          </span>
-        </button>
-        <nav className="font-quicksand hidden items-center gap-1 text-xs font-semibold tracking-widest uppercase lg:flex">
-          {navigation.map((item) => (
-            <button
-              key={item.name}
-              onClick={() => item.href && router.push(item.href)}
-              disabled={!item.href}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-4 py-2 transition-colors",
-                item.name === "Strategy Matrix"
-                  ? "bg-primary/10 text-primary"
-                  : item.href
-                    ? "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    : "cursor-not-allowed text-muted-foreground/45"
-              )}
-            >
-              <item.icon className="size-3.5" />
-              {item.name}
-            </button>
-          ))}
-        </nav>
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-1.5 font-mono text-xs sm:flex">
-            <span className="size-2 rounded-full bg-emerald-500" />
-            SYS: ONLINE
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExit}
-            className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
-          >
-            <LogOut className="size-3.5" /> Exit
-          </Button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6">
+    <main className="min-h-full bg-muted/20 text-foreground">
+      <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-[0.22em] text-primary uppercase">
@@ -421,8 +348,8 @@ export default function StrategyMatrixPage() {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   )
 }
 

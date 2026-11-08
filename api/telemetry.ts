@@ -99,9 +99,8 @@ export async function getNormalizedTelemetry() {
   // 1. Run normalization first
   try {
     await normalizeTelemetry()
-  } catch (error) {
-    // Log error, but proceed to fetch existing normalized data rather than breaking the UI
-    console.warn("Telemetry normalization warning:", error)
+  } catch {
+    // Normalization is best effort; existing normalized records remain readable.
   }
 
   // 2. Fetch the normalized telemetry records
