@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef } from "react"
 import {
   Activity,
   AlertTriangle,
@@ -28,6 +28,7 @@ import {
   YAxis,
 } from "recharts"
 
+import MultiStopPlanner from "@/components/pit-wall/MultiStopPlanner"
 import TelemetryDisplay from "@/components/pit-wall/TelemetryDisplay"
 import AiStrategyPanel from "@/components/pit-wall/AiStrategyPanel"
 import InitialStartegy from "@/components/initial-strategy/InitialStartegy"
@@ -177,6 +178,8 @@ export default function PitWallPage() {
   const drivers = useMemo(() => driversQuery.data?.result ?? [], [driversQuery.data?.result])
   const circuits = useMemo(() => circuitsQuery.data?.result ?? [], [circuitsQuery.data?.result])
   const cars = useMemo(() => carsQuery.data?.result ?? [], [carsQuery.data?.result])
+
+  const payloadRef = useRef<(() => Record<string, unknown>) | null>(null)
 
   const effectiveDriver = useMemo(
     () =>
@@ -377,6 +380,7 @@ export default function PitWallPage() {
               />
               <AiStrategyPanel
                 key={`${effectiveDriver?.id ?? "driver"}-${effectiveCircuit?.id ?? "circuit"}-${activeSequence?.defaultLapCount ?? totalLaps}`}
+                payloadRef={payloadRef}
                 driverId={effectiveDriver?.acronym ?? effectiveDriver?.id}
                 driverName={
                   effectiveDriver?.broadcastName ?? effectiveDriver?.fullName
@@ -398,6 +402,8 @@ export default function PitWallPage() {
                 }
               />
             </section>
+
+            <MultiStopPlanner payloadRef={payloadRef} />
 
             {false && (
               <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr_0.95fr]">

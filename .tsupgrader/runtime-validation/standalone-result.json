@@ -1,0 +1,101 @@
+{
+  "planHash": "3b1c5593adf9ea1b2144bf08ecc9e67beeda18de3b4431f38cb64453e2af6830",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-11-11T18:13:52.9571380Z",
+  "retryCount": 3,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "tsc-no-emit",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E frontend@0.0.1 typecheck\r\n\u003E tsc --noEmit\r\n\r\n",
+        "durationMs": 2613
+      },
+      {
+        "name": "production-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E frontend@0.0.1 build\r\n\u003E next build\r\n\r\n\u25B2 Next.js 16.2.6 (Turbopack)\r\n- Environments: .env.local\r\n\r\n  Creating an optimized production build ...\r\n\u2713 Compiled successfully in 4.7s\r\n  Running TypeScript ...\r\n  Finished TypeScript in 5.7s ...\r\n  Collecting page data using 11 workers ...\r\n  Generating static pages using 11 workers (0/13) ...\r\nThe width(-1) and height(-1) of chart should be greater than 0,\r\n       please check the style of container, or the props width(100%) and height(100%),\r\n       or add a minWidth(0) or minHeight(210) or use aspect(undefined) to control the\r\n       height and width.\r\nThe width(-1) and height(-1) of chart should be greater than 0,\r\n       please check the style of container, or the props width(100%) and height(100%),\r\n       or add a minWidth(0) or minHeight(250) or use aspect(undefined) to control the\r\n       height and width.\r\n  Generating static pages using 11 workers (3/13) \r\n  Generating static pages using 11 workers (6/13) \r\n  Generating static pages using 11 workers (9/13) \r\n\u2713 Generating static pages using 11 workers (13/13) in 555ms\r\n  Finalizing page optimization ...\r\n\r\nRoute (app)\r\n\u250C \u25CB /\r\n\u251C \u25CB /_not-found\r\n\u251C \u25CB /admin/dashboard\r\n\u251C \u25CB /admin/dashboard/assets\r\n\u251C \u25CB /admin/dashboard/pit-wall\r\n\u251C \u25CB /admin/dashboard/race-sequence\r\n\u251C \u25CB /admin/dashboard/strategy-matrix\r\n\u251C \u25CB /admin/dashboard/team\r\n\u251C \u25CB /auth/login\r\n\u251C \u25CB /auth/register\r\n\u2514 \u25CB /dashboard\r\n\r\n\r\n\u25CB  (Static)  prerendered as static content\r\n\r\n",
+        "durationMs": 14642
+      },
+      {
+        "name": "dev-server-serves-home",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!DOCTYPE html\u003E\u003Chtml lang=\u0022en\u0022 class=\u0022antialiased geist_mono_b4d4e0d7-module__vc6T-a__variable font-sans roboto_cbe19a1-module__W-4k3G__variable lora_9ef4832b-module__Dy5cma__variable\u0022\u003E\u003Chead\u003E\u003Cmeta charSet=\u0022utf-8\u0022/\u003E\u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1\u0022/\u003E\u003Clink rel=\u0022preload\u0022 as=\u0022image\u0022 imageSrcSet=\u0022/_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=640\u0026amp;q=75 640w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=750\u0026amp;q=75 750w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=828\u0026amp;q=75 828w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=1080\u0026amp;q=75 1080w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=1200\u0026amp;q=75 1200w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=1920\u0026amp;q=75 1920w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=2048\u0026amp;q=75 2048w, /_next/image?url=%2Ff1-hero-1.jpg\u0026amp;w=3840\u0026amp;q=75 3840w\u0022 imageSizes=\u0022100vw\u0022/\u003E\u003Clink rel=\u0022stylesheet\u0022 href=\u0022/_next/static/chunks/%5Broot-of-the-server%5D__0.8ptqu._.css\u0022 data-precedence=\u0022next_static/chunks/[root-of-the-server]__0.8ptqu._.css\u0022/\u003E\u003Clink rel=\u0022preload\u0022 as=\u0022script\u0022 fetchPriority=\u0022low\u0022 href=\u0022/_next/static/chunks/%5Bturbopack%5D_browser_dev_hmr-client_hmr-client_ts_10z625~._.js\u0022/\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_next-devtools_index_0553esy.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-dom_058-ah~._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_compiled_0rpq4pf._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_client_0fhqo1d._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_115brz8._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_%40swc_helpers_cjs_0-4ujiy._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_0rqeker._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/turbopack-_0p44nws._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_%40tanstack_query-devtools_build_0ljy43g._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_0wste85._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_0m8ygyg._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/app_layout_tsx_004glpo._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/_06y0z~b._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_tailwind-merge_dist_bundle-mjs_mjs_0ezz.e5._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_recharts_es6_util_0cpm3v.._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_recharts_es6_component_0jzrxmv._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_recharts_es6_state_0cm~o12._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_recharts_es6_cartesian_0zs_zv8._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_recharts_es6_01x8zm8._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_06-9rlh._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_08lyjc1._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/app_page_tsx_0wl5ogn._.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_client_components_builtin_global-error_0wl5ogn.js\u0022 async=\u0022\u0022\u003E\u003C/script\u003E\u003Cmeta name=\u0022next-size-adjust\u0022 content=\u0022\u0022/\u003E\u003Clink rel=\u0022icon\u0022 href=\u0022/favicon.ico?favicon.0x3dzn~oxb6tn.ico\u0022 sizes=\u0022256x256\u0022 type=\u0022image/x-icon\u0022/\u003E\u003Cscript src=\u0022/_next/static/chunks/node_modules_next_dist_build_polyfills_polyfill-nomodule.js\u0022 noModule=\u0022\u0022\u003E\u003C/script\u003E\u003C/head\u003E\u003Cbody\u003E\u003Cdiv hidden=\u0022\u0022\u003E\u003C!--$--\u003E\u003C!--/$--\u003E\u003C/div\u003E\u003Cscript\u003E((e, i, s, u, m, a, l, h)=\u003E{\n    let d = document.documentElement, w = [\n        \u0022light\u0022,\n        \u0022dark\u0022\n    ];\n    function p(n) {\n        (Array.isArray(e) ? e : [\n            e\n        ]).forEach((y)=\u003E{\n            let k = y === \u0022class\u0022, S = k \u0026\u0026 a ? m.map((f)=\u003Ea[f] || f) : m;\n            k ? (d.classList.remove(...S), d.classList.add(a \u0026\u0026 a[n] ? a[n] : n)) : d.setAttrib\n\u2026[truncated]",
+        "durationMs": 94
+      }
+    ],
+    "executions": [
+      {
+        "source": "devServer",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev"
+        ],
+        "cwd": "C:\\Users\\User\\Desktop\\Programming\\Formula-1\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tsc-no-emit",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "typecheck"
+        ],
+        "cwd": "C:\\Users\\User\\Desktop\\Programming\\Formula-1\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "production-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\User\\Desktop\\Programming\\Formula-1\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "dev-server-serves-home",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev"
+        ],
+        "cwd": "C:\\Users\\User\\Desktop\\Programming\\Formula-1\\frontend",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

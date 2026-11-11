@@ -1,0 +1,2568 @@
+#### src/models.py
+```python
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+from enum import Enum
+
+class TyreSet(BaseModel):
+    compound: str       # "SOFT", "MEDIUM", "HARD"
+    status: str         # "NEW", "USED"
+    life_at_start: int  # If "USED", how many laps were on it
+
+class TyreStage(str, Enum):
+    WARM_UP = "WARM_UP"         # Keep temps up, careful on brakes
+    STABLE = "STABLE"           # Pushing window
+    GRAINING = "GRAINING"       # Rubber tearing (recoverable)
+    THERMAL_DEG = "THERMAL_DEG" # Normal wear (linear drop)
+    CLIFF = "CLIFF"             # Immediate pit required
+
+class DrivingMode(str, Enum):
+    MANAGEMENT = "MANAGEMENT" # Saving tyres
+    NORMAL = "NORMAL"
+    PUSH = "PUSH"             # Sacrificing tyres for position
+
+class DriverProfile(BaseModel):
+    driver_id: str
+    name: str
+    smoothness_factor: float # 0.0 - 1.0 (1.0 = VERY smooth, e.g. Perez)
+    aggression_multiplier: float
+
+class PitStop(BaseModel):
+    lap: int
+    compound: str
+    tyre_age_at_pit: int
+
+class RaceState(BaseModel):
+    lap_number: int
+    total_laps: int
+    laps_remaining: int
+    current_compound: str
+    current_tyre_laps: int
+    compounds_used_in_race: List[str] # List of compounds used so far (including current)
+    available_tyres: List[TyreSet]
+    track_status: str = "GREEN" # "GREEN", "VSC", "SC"
+    pit_window_loss: float = 22.0
+    
+    driver_id: str = "VER"
+    driving_mode: DrivingMode = DrivingMode.NORMAL
+    track_id: str = "Spanish Grand Prix" # Name of the race event
+    last_lap_time: float = 80.0
+    stint_number: int = 1
+    fuel_load_kg: float = 100.0  # Estimated
+    track_temp: float = 35.0 # Celsius
+    air_temp: float = 25.0 # Celsius
+    rainfall_intensity: float = 0.0 # mm/h
+    humidity: float = 50.0 # Percentage
+    traffic_density: float = 0.0 # 0.0 (clean air) to 1.0 (heavy traffic)
+    last_5_lap_times: List[float] = [] # Actual recent lap times for sequence prediction
+    pit_stop_history: List[PitStop] = [] # History of executed pits
+    race_history: List[str] = [] # e.g. ["Lap 10: SC deployed", "Lap 20: Pitted for HARD"]
+    position: int = 1 # Current track position
+    race_baseline: float = 85.0 # Baseline for LapDelta calculation
+    driver_state: Optional['DriverState'] = None
+
+class DriverState(BaseModel):
+    smoothness: float
+    aggression: float
+    fatigue: float = 0.0
+    confidence: float = 1.0
+
+class ConditionalBranch(BaseModel):
+    action: str
+    target_compound: Optional[str]
+    condition: str
+
+class DecisionEnvelope(BaseModel):
+    primary_action: str
+    confidence: float
+    risk_level: str
+    reasoning: str
+    conditional_branch: Optional[ConditionalBranch] = None
+
+class StrategyOutput(BaseModel):
+    action: str          # "STAY_OUT" or "BOX_BOX"
+    target_compound: Optional[str]
+    remaining_life: int
+    predicted_pace_vector: List[float]
+    reasoning: str
+    
+    # New Contextual Output
+    tyre_stage: TyreStage
+    alert_level: str # "GREEN", "YELLOW", "RED"
+    message: str
+    undercut_probability: float = 0.0 # 0.0 to 1.0
+    
+    # Decision Confidence Envelope
+    meta: Optional[Dict] = None # Stores the DecisionEnvelope
+```
+
+#### src/sophie_engine.py
+```python
+import joblib
+import os
+import hashlib
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+import threading
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Optional, Dict
+from src.track_features import get_track_features
+from src.models import RaceState, StrategyOutput, TyreStage, DrivingMode, ConditionalBranch, DecisionEnvelope
+from src.ai_strategist import AIStrategist
+from src.astrix_engine import AstrixEngine
+
+class SophieEngine:
+    """
+    Sophie Engine: Using LSTM V6 (Sophie) trained on 4 Seasons (2021-2024).
+    Features deeper architecture and more robust seq memory.
+    """
+    def __init__(self, model_dir='src/models/sophie/'):
+        self.ai_strategist = AIStrategist()
+        self.astrix = AstrixEngine()
+        self.calibration_offset = 0.0
+        self.deterministic_mode = os.getenv("SOPHIE_DETERMINISTIC_TEST_MODE", "0") == "1"
+        self.random_seed = int(os.getenv("SOPHIE_RANDOM_SEED", "42"))
+        # Configurable Monte Carlo runs per endpoint
+        try:
+            self.mcruns_decision = int(os.getenv('MCRUNS_DECISION', '12'))
+            self.mcruns_explain = int(os.getenv('MCRUNS_EXPLAIN', '8'))
+            self.mcruns_planner = int(os.getenv('MCRUNS_PLANNER', '6'))
+        except Exception:
+            self.mcruns_decision, self.mcruns_explain, self.mcruns_planner = 12, 8, 6
+        # Threading controls for performance
+        self._predict_lock = threading.Lock()
+        try:
+            max_workers = max(2, (os.cpu_count() or 4) - 1)
+        except Exception:
+            max_workers = 4
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        # Optimize TensorFlow threading for inference
+        try:
+            tf.config.threading.set_intra_op_parallelism_threads(max_workers)
+            tf.config.threading.set_inter_op_parallelism_threads(min(2, max_workers))
+        except Exception:
+            pass
+        
+        try:
+            self.model = tf.keras.models.load_model(f'{model_dir}sophie_lstm_v2.keras', compile=False)
+            self.scaler_X = joblib.load(f'{model_dir}scaler_X.joblib')
+            self.scaler_y = joblib.load(f'{model_dir}scaler_y.joblib')
+            self.le_compound = joblib.load(f'{model_dir}le_compound.joblib')
+            # self.le_track = joblib.load(f'{model_dir}le_track.joblib') # Removed
+            self.feature_names = joblib.load(f'{model_dir}features.joblib')
+            # Use sophie profiles if they exist, else fallback
+            self.profiles_df = pd.read_csv('sophie_driver_profiles.csv').set_index('Driver') if os.path.exists('sophie_driver_profiles.csv') else None
+        except Exception as e:
+            print(f"SophieEngine Load Error: {e}")
+            self.model = None
+
+    def _rng_for_call(self, state, compound: str, start_age: int, num_laps: int, monte_carlo_runs: int):
+        """
+        Build a call-local RNG so test-mode predictions are deterministic regardless of worker/thread order.
+        """
+        if not self.deterministic_mode:
+            return np.random.default_rng()
+
+        seed_key = (
+            f"{self.random_seed}|{state.driver_id}|{state.track_id}|{state.lap_number}|"
+            f"{state.total_laps}|{state.laps_remaining}|{state.current_compound}|{state.current_tyre_laps}|"
+            f"{compound}|{start_age}|{num_laps}|{monte_carlo_runs}|{state.track_status}|"
+            f"{state.track_temp}|{state.air_temp}|{state.rainfall_intensity}|{state.humidity}|{state.traffic_density}"
+        )
+        digest = hashlib.sha256(seed_key.encode("utf-8")).hexdigest()
+        call_seed = int(digest[:16], 16) % (2**32 - 1)
+        return np.random.default_rng(call_seed)
+
+    def get_driver_profile(self, driver_id: str) -> Dict:
+        if self.profiles_df is not None and driver_id in self.profiles_df.index:
+            row = self.profiles_df.loc[driver_id]
+            return {
+                "smoothness": row['smoothness_factor'],
+                "aggression": row['aggression_multiplier']
+            }
+        return {"smoothness": 0.7, "aggression": 0.5}
+
+    def synthesize_initial_window(self, state, compound, current_age, profile, comp_encoded, track_features):
+        window = []
+        comp_offsets = {"SOFT": 0.0, "MEDIUM": 1.0, "HARD": 2.2}
+        comp_offset = comp_offsets.get(compound, 1.5)
+        
+        # New Relative Delta Logic (Baseline centered around 0.0)
+        # Softs should be slightly faster than baseline (-0.5s), Hards slower (+1.7s)
+        base_delta = -1.0 + comp_offset 
+        base_delta -= profile['aggression'] * 0.4
+        base_delta -= profile['smoothness'] * 0.3
+        
+        # Weather Features (Fixed coeff 0.05 to match training loader)
+        track_wetness = (state.rainfall_intensity * 0.6) + (max(0, 35 - state.track_temp) * 0.05)
+        is_wet_regime = 1 if compound in ['INTERMEDIATE', 'WET', 'INTER'] else 0
+        
+        for i in range(5):
+            age_at_step = max(0, current_age - (5 - i))
+            lap_num = max(1, state.lap_number - (5 - i))
+            
+            # Simulate Delta directly
+            sim_delta = base_delta + (age_at_step * 0.05) + np.random.normal(0, 0.05)
+            
+            window.append([
+                comp_encoded,
+                current_age - (5 - i), # TyreLife
+                state.lap_number - (5 - i), # LapNumber
+                state.track_temp,
+                state.humidity,
+                state.rainfall_intensity,
+                track_wetness,
+                is_wet_regime,
+                track_features[0], # Roughness
+                track_features[1], # OvertakeDiff
+                track_features[2], # DegSens
+                profile['smoothness'],
+                profile['aggression'],
+                sim_delta # Use Delta directly
+            ])
+        return window
+
+    def predict_pace(self, state, compound, start_age, num_laps, monte_carlo_runs=20):
+        """
+        Batched Monte Carlo inference to minimize model.predict calls.
+        Reduces calls from (runs * laps) to (laps), leveraging TF batch dimension.
+        """
+        # Guard against empty prediction horizon
+        if num_laps <= 0:
+            return [], 0.0
+        # Driver personalization
+        if state.driver_state:
+            profile = {
+                'smoothness': state.driver_state.smoothness,
+                'aggression': state.driver_state.aggression
+            }
+        else:
+            profile = self.get_driver_profile(state.driver_id)
+
+        if not self.model:
+            return [80.0] * num_laps, 0.0
+
+        runs = max(1, int(monte_carlo_runs))
+        rng = self._rng_for_call(state, compound, start_age, num_laps, runs)
+        comp_encoded = self.le_compound.transform([compound])[0] if compound in self.le_compound.classes_ else 0
+        track_feat = get_track_features(state.track_id)
+        is_current_stint = (compound == state.current_compound)
+
+        # Build initial window for all runs
+        def build_initial_window(current_age: int):
+            rows = []
+            tw = (state.rainfall_intensity * 0.6) + (max(0, 35 - state.track_temp) * 0.05)
+            wet_flag = 1 if compound in ['INTERMEDIATE', 'WET', 'INTER'] else 0
+            if is_current_stint and len(state.last_5_lap_times) == 5:
+                for i in range(5):
+                    lap_idx = state.lap_number - 5 + i
+                    fuel_corrected = state.last_5_lap_times[i] - (lap_idx * 0.032)
+                    delta = fuel_corrected - state.race_baseline
+                    rows.append([
+                        comp_encoded,
+                        max(0, current_age - (5 - i)),
+                        lap_idx,
+                        state.track_temp,
+                        state.humidity,
+                        state.rainfall_intensity,
+                        tw,
+                        wet_flag,
+                        track_feat[0], track_feat[1], track_feat[2],
+                        profile['smoothness'], profile['aggression'],
+                        delta
+                    ])
+            else:
+                rows = self.synthesize_initial_window(state, compound, current_age, profile, comp_encoded, track_feat)
+            return rows
+
+        base_window = build_initial_window(start_age)
+        
+        # --- Vectorized State Setup ---
+        # windows: (runs, 5, features)
+        windows = np.tile(np.array(base_window, dtype=np.float32), (runs, 1, 1))
+        
+        # Perturbation on last feature (PrevDelta)
+        noise = rng.normal(0, 0.02, size=runs)
+        windows[:, -1, -1] += noise
+
+        # State vectors
+        current_age = np.full(runs, start_age, dtype=np.int32)
+        last_pure_pace = np.full(runs, -999.0, dtype=np.float32)  # Use float sentinel updates
+        personalization_offset = np.zeros(runs, dtype=np.float32)
+        
+        # Pre-allocate output matrix: (runs, num_laps)
+        pace_matrix = np.zeros((runs, num_laps), dtype=np.float32)
+        
+        # Constants for loop
+        cliff_max = 24 if compound == 'SOFT' else 34 if compound == 'MEDIUM' else 44
+        fuel_scalar = 0.7 if state.track_status in ["SC", "VSC"] else 1.0
+        tw = (state.rainfall_intensity * 0.6) + (max(0, 35 - state.track_temp) * 0.05)
+        wet_flag = 1.0 if compound in ['INTERMEDIATE', 'WET', 'INTER'] else 0.0
+        
+        # Prepare static features part of the new row: (runs, N-1)
+        # Features: [Comp, Age, Lap, TrackT, Hum, Rain, WetIdx, WetFlag, Rough, Overtake, DegSens, Smooth, Aggr, PrevDelta]
+        # PrevDelta and Age/Lap change per step. Others are constant.
+        # We'll construct the static part once.
+        static_features = np.array([
+            comp_encoded, 0, 0, state.track_temp, state.humidity, state.rainfall_intensity,
+            tw, wet_flag, track_feat[0], track_feat[1], track_feat[2],
+            profile['smoothness'], profile['aggression']
+        ], dtype=np.float32)
+        
+        static_batch = np.tile(static_features, (runs, 1)) # (runs, 13)
+        
+        # Define Fast Inference Function
+        # Wrapping the model call in a compiled function speeds up repetitive execution
+        @tf.function(reduce_retracing=True)
+        def fast_model_call(inputs):
+            return self.model(inputs, training=False)
+
+        # Lap loop: fully vectorized
+        for i in range(num_laps):
+            # Scale
+            # Note: scaler_X expects 2D (samples, features). 
+            # We reshape (runs, 5, feat) -> (runs*5, feat) -> scale -> reshape back
+            # This constant reshaping in Python might be slow. 
+            # Optimization: If scaler is linear (StandardScaler), we can manually apply it using broadcasting
+            # instead of calling sklearn's transform which does validation.
+            # Manual Scaling: (x - mean) / scale
+            flat_windows = windows.reshape(runs * 5, -1)
+            # seq_scaled = (flat_windows - self.scaler_X.mean_) / self.scaler_X.scale_
+            # We trust self.scaler_X attributes exists
+            seq_scaled = (flat_windows - self.scaler_X.mean_) / self.scaler_X.scale_
+            seq_scaled = seq_scaled.reshape(runs, 5, -1)
+
+            # Predict (TF Graph Execution)
+            preds_scaled = fast_model_call(seq_scaled).numpy().reshape(runs)
+
+            # Add stochastic noise
+            step_noise = rng.normal(0, 0.15 * (1 - profile['smoothness']), size=runs)
+            preds_scaled += step_noise
+
+            # Inverse Scale: y * scale + mean
+            pred_delta = preds_scaled * self.scaler_y.scale_[0] + self.scaler_y.mean_[0]
+
+            # Vectorized Physics Guards
+            # 1. Monotonicity guard: Max(pred, last_pure + 0.001) if last_pure valid
+            valid_mask = last_pure_pace != -999.0
+            if np.any(valid_mask):
+                 pred_delta[valid_mask] = np.maximum(pred_delta[valid_mask], last_pure_pace[valid_mask] + 0.001)
+            
+            # 2. Cliff guard
+            cliff_mask = current_age > cliff_max
+            if np.any(cliff_mask):
+                penalty = (current_age[cliff_mask] - cliff_max) ** 1.5 * 0.25
+                pred_delta[cliff_mask] += penalty
+            
+            last_pure_pace = pred_delta.copy()
+
+            # Calculate actual times
+            fuel_correction = (state.lap_number + i) * 0.032 * fuel_scalar
+            actual_times = (pred_delta + state.race_baseline) - fuel_correction
+
+            # Personalization (First lap only)
+            if i == 0 and is_current_stint:
+                raw_offset = state.last_lap_time - actual_times
+                personalization_offset = np.clip(raw_offset, -2.0, 2.0)
+
+            final_times = actual_times + personalization_offset
+            pace_matrix[:, i] = final_times
+
+            # Update State for Next Step
+            current_age += 1
+            
+            # Construct new feature rows
+            # Update dynamic columns in static_batch keys: Age (idx 1), Lap (idx 2)
+            static_batch[:, 1] = current_age
+            static_batch[:, 2] = state.lap_number + i + 1
+            
+            # Combine static + pred_delta
+            # new_rows: (runs, 14)
+            new_rows = np.hstack([static_batch, pred_delta.reshape(runs, 1)])
+            
+            # Window Slide: Drop first, append new
+            # windows[:, :-1, :] = windows[:, 1:, :] # Shift left
+            # windows[:, -1, :] = new_rows           # Set last
+            # Optimized concatenation to avoid in-place assignment issues if any
+            windows = np.concatenate([windows[:, 1:, :], new_rows[:, np.newaxis, :]], axis=1)
+
+        # Aggregate Results
+        mean_pace = np.mean(pace_matrix, axis=0) # (num_laps,)
+        std_pace = np.std(pace_matrix, axis=0)
+        risk_adjusted = mean_pace + 0.5 * std_pace
+        
+        return risk_adjusted.tolist(), float(np.mean(std_pace))
+
+    # --- Astrix integration helpers ---
+    def _choose_slick_target(self, available_tyres, laps_remaining: int) -> str:
+        """Select a concrete slick compound based on stint length and availability."""
+        pref = 'SOFT' if laps_remaining <= 15 else 'MEDIUM' if laps_remaining <= 30 else 'HARD'
+        avail_new = [t.compound for t in available_tyres if getattr(t, 'status', 'NEW') == 'NEW']
+        for c in [pref, 'MEDIUM', 'SOFT', 'HARD']:
+            if c in avail_new:
+                return c
+        all_comps = [t.compound for t in available_tyres]
+        for c in [pref, 'MEDIUM', 'SOFT', 'HARD']:
+            if c in all_comps:
+                return c
+        return pref
+
+    def _astrix_compound_hint(self, state, tyres_list, weather_intel: Dict):
+        """
+        Derive preferred regime category and concrete compound suggestion from Astrix intel.
+        Returns (preferred_category, suggested_compound_or_None, confidence).
+        """
+        regime_probs = weather_intel.get('regime_probs', {}) or {}
+        deltas = weather_intel.get('deltas', {}) or {}
+        likely_cat = max(regime_probs, key=regime_probs.get) if regime_probs else weather_intel.get('recommended_compound', 'SLICK')
+        theoretical_best_cat = min(deltas, key=deltas.get) if deltas else likely_cat
+        conf = float(weather_intel.get('confidence', 0.0))
+        preferred_cat = likely_cat if conf >= 0.7 else theoretical_best_cat
+
+        # Current category
+        current_cat = 'SLICK' if state.current_compound in ['SOFT', 'MEDIUM', 'HARD'] else ('INTER' if state.current_compound in ['INTERMEDIATE', 'INTER'] else 'WET')
+
+        suggested = None
+        if preferred_cat == 'SLICK' and current_cat != 'SLICK' and conf >= 0.65:
+            suggested = self._choose_slick_target(tyres_list, state.laps_remaining)
+        elif preferred_cat == 'INTER' and conf >= 0.7:
+            if any(t.compound in ['INTER', 'INTERMEDIATE'] for t in tyres_list):
+                suggested = 'INTER'
+        elif preferred_cat == 'WET' and conf >= 0.7:
+            if any(t.compound == 'WET' for t in tyres_list):
+                suggested = 'WET'
+
+        return preferred_cat, suggested, conf
+
+    def infer_strategy_mode(self, state) -> str:
+        """
+        Decide high-level strategic intent based on race context.
+        OPTIMAL: Minimize race time (green flag, mid-race)
+        OPPORTUNISTIC: Gain position/restart advantage (SC/VSC, Late Race)
+        DEFENSIVE: Protect position/avoid failure (High deg)
+        """
+        # 1. Safety Car / VSC = opportunity for cheap stop & restart grip
+        if state.track_status in ["SC", "VSC"]:
+            return "OPPORTUNISTIC"
+
+        # 1.5. Dirty-air attack mode: if driver is pushing on a hard-to-pass track,
+        # allow undercut-style strategic behavior earlier in the race.
+        track_features = get_track_features(state.track_id)
+        overtake_difficulty = track_features[1]
+        if (
+            state.driving_mode == DrivingMode.PUSH
+            and overtake_difficulty >= 0.65
+            and state.laps_remaining >= 18
+            and state.current_tyre_laps >= 10
+        ):
+            return "OPPORTUNISTIC"
+
+        # 2. Late race aggression (last 15 laps) -> pace > durability
+        if state.laps_remaining <= 15:
+            return "OPPORTUNISTIC"
+
+        # 3. High tyre age + green race -> defensive/safety
+        cliff_age = 24 if state.current_compound == 'SOFT' else 34 if state.current_compound == 'MEDIUM' else 44
+        if state.current_tyre_laps >= cliff_age - 3:
+            return "DEFENSIVE"
+
+        return "OPTIMAL"
+
+    async def solve_multi_stop_strategy(self, state: RaceState) -> Dict:
+        """
+        Simulate multiple pit-stop permutations to find the optimal race strategy.
+        Now context-aware: Applies strategic bonuses to total times for ranking.
+        """
+        current_laps_remaining = state.laps_remaining
+        pit_loss = state.pit_window_loss
+        
+        # Reduced pit loss under SC/VSC
+        is_cheap_pit = state.track_status in ["VSC", "SC"]
+        if is_cheap_pit: pit_loss *= 0.55
+        
+        mode = self.infer_strategy_mode(state)
+        weather_intel = self.astrix.get_weather_intelligence(state)
+        pref_cat, pref_compound, pref_conf = self._astrix_compound_hint(state, state.available_tyres, weather_intel)
+        # Bonus map: Seconds of "perceived value" subtracted from total time
+        COMPOUND_STRATEGIC_VALUE = {
+            "OPTIMAL": { "SOFT": 0.5, "MEDIUM": 3.0, "HARD": 2.5 },       # Strong bias for Mediums, but Hards promoted for endurance
+            "OPPORTUNISTIC": { "SOFT": 5.0, "MEDIUM": 2.0, "HARD": 0.0 }, # Sprint finish: Soft is king
+            "DEFENSIVE": { "SOFT": -2.0, "MEDIUM": 2.5, "HARD": 5.0 }     # Long game: Hard is prioritized
+        }
+        
+        strategies = []
+        
+        # Helper: Simulate a full strategy sequence
+        def simulate_sequence(seq_compounds, seq_laps):
+            physical_time = 0.0
+            decision_score = 0.0
+            time_trace = []
+            current_age_sim = state.current_tyre_laps
+            
+            # First stint (Current)
+            pace, _ = self.predict_pace(state, state.current_compound, current_age_sim, seq_laps[0], monte_carlo_runs=self.mcruns_planner)
+            physical_time += sum(pace)
+            decision_score += sum(pace)
+            time_trace.extend(pace)
+            
+            # Subsequent stints
+            for i in range(1, len(seq_compounds)):
+                comp = seq_compounds[i]
+                laps = seq_laps[i]
+                
+                # Strategic Bonus (Decision bias only)
+                bonus = COMPOUND_STRATEGIC_VALUE[mode].get(comp, 0.0)
+
+                # Astrix Alignment Bonus: favor compounds matching preferred category
+                comp_cat = 'SLICK' if comp in ['SOFT', 'MEDIUM', 'HARD'] else ('INTER' if comp in ['INTER', 'INTERMEDIATE'] else 'WET')
+                astrix_bonus = 0.0
+                if pref_conf >= 0.65 and comp_cat == pref_cat:
+                    # scale bonus with confidence (up to ~3s)
+                    astrix_bonus = max(0.5, min(3.0, (pref_conf - 0.6) * 10))
+                
+                # Traffic Penalty (Real time loss, but gated)
+                track_features = get_track_features(state.track_id)
+                traffic_penalty = state.traffic_density * track_features[1] * 8.0 
+                
+                # Fix Fault 3: Gate traffic penalty
+                if is_cheap_pit: # Compressed field but slow speed
+                    traffic_penalty *= 0.3
+                if state.traffic_density < 0.15: # Clean air heuristic
+                    traffic_penalty = 0.0
+                    
+                # Update metrics
+                # Physical: Real pit loss + penalty
+                physical_time += pit_loss + traffic_penalty
+
+                # Decision: mirror physical cost; apply strategic bonus separately
+                decision_score += (pit_loss + traffic_penalty)
+                
+                pace_new, _ = self.predict_pace(state, comp, 0, laps, monte_carlo_runs=self.mcruns_planner) # Fresh tyres
+                physical_time += sum(pace_new)
+                decision_score += sum(pace_new)
+                # Apply bonuses after physical components
+                decision_score -= bonus
+                decision_score -= astrix_bonus
+                time_trace.extend(pace_new)
+                
+            return physical_time, decision_score, time_trace
+
+        # 1. Evaluate 0-Stop (Stay Out)
+        if current_laps_remaining < 40:
+            p_time, d_score, trace = simulate_sequence([state.current_compound], [current_laps_remaining])
+            strategies.append({
+                "name": "Stay Out (0-Stop)",
+                "total_time": p_time,
+                "score": d_score,
+                "compounds": [state.current_compound],
+                "laps": [current_laps_remaining]
+            })
+            
+        # 2. Evaluate 1-Stop Strategies
+        available_compounds = [t.compound for t in state.available_tyres if t.status == 'NEW']
+        if not available_compounds: available_compounds = ['HARD', 'MEDIUM'] # Fallback
+        
+        for comp in available_compounds:
+            # Box THIS LAP
+            p_time, d_score, trace = simulate_sequence([state.current_compound, comp], [0, current_laps_remaining])
+            strategies.append({
+                "name": f"Box Now -> {comp}",
+                "total_time": p_time,
+                "score": d_score,
+                "compounds": [state.current_compound, comp],
+                "laps": [0, current_laps_remaining]
+            })
+
+        # If Astrix suggests a specific compound, ensure it's evaluated (even if not NEW)
+        if pref_compound and pref_compound not in available_compounds:
+            p_time, d_score, trace = simulate_sequence([state.current_compound, pref_compound], [0, current_laps_remaining])
+            strategies.append({
+                "name": f"Box Now -> {pref_compound} (Astrix)",
+                "total_time": p_time,
+                "score": d_score,
+                "compounds": [state.current_compound, pref_compound],
+                "laps": [0, current_laps_remaining]
+            })
+            
+            # Box in 10 laps (Overcut/Extend)
+            if current_laps_remaining > 15:
+                extend_len = 10
+                p_time, d_score, trace = simulate_sequence([state.current_compound, comp], [extend_len, current_laps_remaining - extend_len])
+                strategies.append({
+                    "name": f"Extend 10L -> {comp}",
+                    "total_time": p_time,
+                    "score": d_score,
+                    "compounds": [state.current_compound, comp],
+                    "laps": [extend_len, current_laps_remaining - extend_len]
+                })
+
+            # Fix Fault 4: Strategy Space (Sliding Pit Window)
+            if current_laps_remaining > 5:
+                # Simulate sliding window for the next 15 laps (or remaining)
+                slider_range = min(15, current_laps_remaining - 1)
+                for pit_lap in range(1, slider_range, 3): # Step by 3 to save compute
+                    p_time, d_score, trace = simulate_sequence([state.current_compound, comp], [pit_lap, current_laps_remaining - pit_lap])
+                    strategies.append({
+                        "name": f"Box L+{pit_lap} -> {comp}",
+                        "total_time": p_time,
+                        "score": d_score,
+                        "compounds": [state.current_compound, comp],
+                        "laps": [pit_lap, current_laps_remaining - pit_lap]
+                    })
+
+        # 3. Evaluate 2-Stop (Aggressive)
+        if current_laps_remaining > 30:
+            for c1 in available_compounds:
+                for c2 in available_compounds:
+                    if c1 == c2: continue 
+                    
+                    stint_len = current_laps_remaining // 2
+                    t, _, trace = simulate_sequence([state.current_compound, c1, c2], [0, stint_len, current_laps_remaining - stint_len])
+                    strategies.append({
+                        "name": f"Box -> {c1} -> {c2}",
+                        "total_time": t,
+                        "compounds": [state.current_compound, c1, c2],
+                        "laps": [0, stint_len, current_laps_remaining - stint_len]
+                    })
+
+        strategies.sort(key=lambda x: x['total_time'])
+        best = strategies[0]
+        
+        return {
+            "recommended_strategy": best['name'],
+            "total_race_time": best['total_time'],
+            "alternatives": strategies[:3],
+            "mode": mode
+        }
+        
+    def build_decision_envelope(
+        self,
+        state: RaceState,
+        base_action: str,
+        best_pit_compound: Optional[str],
+        predicted_gain: float,
+        pit_loss: float,
+        weather_intel: Optional[Dict] = None
+    ) -> DecisionEnvelope:
+        """
+        Wraps the base decision into a conditional, explainable envelope.
+        """
+
+        # --- Confidence Estimation ---
+        # Heuristic: Higher gain = Higher confidence (Positive gain supports decision)
+        # Range 0.55 to 0.90
+        # Fix: Use signed gain, not abs(), so negative gain lowers confidence
+        raw_conf = 0.6 + (predicted_gain / 10)
+        confidence = min(0.9, max(0.55, raw_conf))
+        
+        # --- Disagreement Penalty ---
+        # If Astrix is very sure about a wet regime, but Sophie wants to Stay Out
+        if weather_intel:
+            astrix_is_wet = weather_intel.get('recommended_compound') != "SLICK"
+            astrix_conf = weather_intel.get('confidence', 0.0)
+            
+            if astrix_is_wet and astrix_conf > 0.8 and base_action == "STAY_OUT":
+                confidence -= 0.2
+            elif not astrix_is_wet and base_action == "BOX_BOX" and best_pit_compound in ["INTER", "WET", "INTERMEDIATE"]:
+                confidence -= 0.3
+        
+        confidence = max(0.4, confidence)
+
+        # --- Risk Assessment ---
+        if state.track_status in ["SC", "VSC"]:
+            risk = "MEDIUM" # Opportunities often carry execution risk
+        elif state.current_tyre_laps > 30:
+            risk = "HIGH" # Failure risk
+        else:
+            risk = "LOW"
+
+        # --- Track Position Critical Tracks ---
+        # Robust Set-based detection
+        TRACK_POSITION_CRITICAL = {"Monaco", "Singapore", "Monza", "Hungaroring", "Zandvoort", "Italian Grand Prix"}
+        # Check if any critical track name is a substring of the input ID (to handle "Monaco Grand Prix" vs "Monaco")
+        track_position_critical = any(t in state.track_id for t in TRACK_POSITION_CRITICAL)
+
+        conditional_branch = None
+
+        # Logic: If we are staying out for track position (or generally), but a Cheap Pit is available,
+        # we might want to Box IF we don't fall into traffic.
+        # Fix: Ensure we are in OPPORTUNISTIC mode so we don't suggest aggressive risks when defensive.
+        if (
+            base_action == "STAY_OUT"
+            and state.track_status in ["SC", "VSC"]
+            and self.infer_strategy_mode(state) == "OPPORTUNISTIC"
+            and track_position_critical
+            and best_pit_compound
+        ):
+            conditional_branch = ConditionalBranch(
+                action="BOX_BOX",
+                target_compound=best_pit_compound,
+                condition="If rejoin position <= P3"
+            )
+
+        return DecisionEnvelope(
+            primary_action=base_action,
+            confidence=round(confidence, 2),
+            risk_level=risk,
+            reasoning="Primary strategy optimized for current race context.",
+            conditional_branch=conditional_branch
+        )
+
+    async def calculate_strategy(self, state: RaceState) -> StrategyOutput:
+        # Infer Strategy Mode
+        mode = self.infer_strategy_mode(state)
+        
+        profile = self.get_driver_profile(state.driver_id)
+        pace_stay, volatility = self.predict_pace(state, state.current_compound, state.current_tyre_laps, state.laps_remaining, monte_carlo_runs=self.mcruns_decision)
+        total_time_stay = sum(pace_stay)
+        
+        pit_cost = state.pit_window_loss
+        is_cheap_pit = state.track_status in ["VSC", "SC"]
+        
+        if is_cheap_pit: 
+            pit_cost *= 0.55 # Significant time saving under SC
+            
+        # --- ASTRIX WEATHER INTELLIGENCE ---
+        weather_intel = self.astrix.get_weather_intelligence(state)
+        weather_gain = 0.0
+        if weather_intel['confidence'] > 0.7:
+            # If Astrix is confident, we incorporate the projected gain of switching compounds
+            weather_gain = weather_intel['delta_gain']
+        
+        # Strategic Values Matrix (Synced with solve_multi_stop_strategy)
+        # Base strategic values per mode
+        COMPOUND_STRATEGIC_VALUE = {
+            "OPTIMAL": { "SOFT": 0.5, "MEDIUM": 3.0, "HARD": 2.5 },
+            "OPPORTUNISTIC": { "SOFT": 3.0, "MEDIUM": 3.0, "HARD": 0.5 },
+            "DEFENSIVE": { "SOFT": -2.0, "MEDIUM": 2.5, "HARD": 5.0 }
+        }
+        strategic_map = COMPOUND_STRATEGIC_VALUE[mode]
+        # Context-sensitive adjustment under SC/VSC: prefer SOFT only for very short stints,
+        # prefer MEDIUM for mid-length stints (e.g., ~18 laps) to align with history
+        if mode == "OPPORTUNISTIC" and state.track_status in ["SC", "VSC"]:
+            if state.laps_remaining <= 15:
+                strategic_map = { "SOFT": 5.0, "MEDIUM": 2.0, "HARD": 0.0 }
+            elif state.laps_remaining <= 25:
+                strategic_map = { "SOFT": 1.5, "MEDIUM": 4.0, "HARD": 0.5 }
+            else:
+                strategic_map = { "SOFT": 0.0, "MEDIUM": 2.0, "HARD": 1.5 }
+
+        best_pit_option = None
+        min_total_time_decision = float('inf')
+        min_total_time_physical = float('inf')
+        
+        # Parallelize evaluation of pit options
+        # We use ThreadPoolExecutor because the underlying model.predict releases GIL.
+        # This allows TF to use its own threads efficiently across multiple compounds.
+        tyres_list = list(state.available_tyres)
+        
+        # Define helper for parallel execution
+        def eval_tyre(tyre):
+            pace, _ = self.predict_pace(state, tyre.compound, tyre.life_at_start, state.laps_remaining, self.mcruns_decision)
+            return tyre, pace
+
+        # Use map for cleaner parallel execution
+        # Note: self._executor is a ThreadPoolExecutor
+        futures = {self._executor.submit(eval_tyre, t): t for t in tyres_list}
+        
+        results = []
+        for future in as_completed(futures):
+            results.append(future.result())
+
+        for tyre, pace_new in results:
+            strategic_bonus = strategic_map.get(tyre.compound, 0.0)
+            # Reduce bonus for USED sets to prefer NEW tyres at restarts
+            if getattr(tyre, 'status', 'NEW') != 'NEW':
+                strategic_bonus *= 0.5
+            
+            total_time_pit_decision = pit_cost + sum(pace_new) - strategic_bonus
+            total_time_pit_physical = pit_cost + sum(pace_new)
+            
+            if total_time_pit_decision < min_total_time_decision:
+                min_total_time_decision = total_time_pit_decision
+                best_pit_option = tyre.compound
+            if total_time_pit_physical < min_total_time_physical:
+                min_total_time_physical = total_time_pit_physical
+                
+        # Map Astrix regime intelligence to an actual tyre choice (drying-line fix)
+        # Prefer SLICK family when classifier is confident on SLICK or deltas favor SLICK.
+        regime_probs = weather_intel.get('regime_probs', {})
+        deltas = weather_intel.get('deltas', {})
+        likely_cat = max(regime_probs, key=regime_probs.get) if regime_probs else weather_intel.get('recommended_compound', 'SLICK')
+        theoretical_best_cat = min(deltas, key=deltas.get) if deltas else likely_cat
+        astrix_conf = float(weather_intel.get('confidence', 0.0))
+
+        # Choose Astrix preferred category: high-conf classifier else regressor best
+        astrix_preferred_cat = likely_cat if astrix_conf >= 0.7 else theoretical_best_cat
+
+        # Helper to choose a concrete slick compound based on stint length and availability
+        def choose_slick_target(available_tyres, laps_remaining):
+            pref = 'SOFT' if laps_remaining <= 15 else 'MEDIUM' if laps_remaining <= 30 else 'HARD'
+            avail = [t.compound for t in available_tyres if t.status == 'NEW']
+            # Fallback priorities
+            for c in [pref, 'MEDIUM', 'SOFT', 'HARD']:
+                if c in avail:
+                    return c
+            # If no NEW sets, allow used sets
+            all_comps = [t.compound for t in available_tyres]
+            for c in [pref, 'MEDIUM', 'SOFT', 'HARD']:
+                if c in all_comps:
+                    return c
+            return pref
+
+        # If we are currently on INTER/WET but Astrix prefers SLICK with confidence, propose a slick
+        current_cat = "SLICK" if state.current_compound in ["SOFT", "MEDIUM", "HARD"] else ("INTER" if state.current_compound in ["INTERMEDIATE", "INTER"] else "WET")
+        if astrix_preferred_cat == "SLICK" and current_cat != "SLICK" and astrix_conf >= 0.65:
+            best_pit_option = choose_slick_target(tyres_list, state.laps_remaining)
+            # Encourage switching by relaxing threshold later
+            weather_gain = max(weather_gain, weather_intel.get('delta_gain', 0.0))
+        elif astrix_preferred_cat in ["INTER", "WET"] and astrix_conf >= 0.7:
+            # Only map to wet/inter if classifier is confident and different from current
+            target_cat = astrix_preferred_cat
+            if target_cat == "INTER":
+                has_inter = any(t.compound in ["INTER", "INTERMEDIATE"] for t in tyres_list)
+                if has_inter:
+                    best_pit_option = "INTER"
+            elif target_cat == "WET":
+                has_wet = any(t.compound == "WET" for t in tyres_list)
+                if has_wet:
+                    best_pit_option = "WET"
+        
+                
+        cliff_age = 18 if state.current_compound == 'SOFT' else 28 if state.current_compound == 'MEDIUM' else 40
+        is_at_cliff = state.current_tyre_laps >= cliff_age
+
+        # --- Smart fix: Compare "Box now" against "Extend then box" instead of unreal 0-stop ---
+        # Evaluate sliding pit window extensions (stay out for X laps, then box to best compound)
+        best_extend_time_decision = float('inf')
+        best_extend_time_physical = float('inf')
+        best_extend_plan = None
+        # Candidate compounds for later: prioritize durable slicks by stint length
+        def _choose_later_comp(laps_left: int) -> str:
+            return 'SOFT' if laps_left <= 15 else 'MEDIUM' if laps_left <= 30 else 'HARD'
+
+        if state.laps_remaining > 5:
+            slider_range = min(15, state.laps_remaining - 1)
+            for pit_lap in range(3, slider_range + 1, 3):
+                # Pace while extending on current tyres
+                extend_pace, _ = self.predict_pace(state, state.current_compound, state.current_tyre_laps, pit_lap)
+                # Choose compound for the remaining stint
+                later_comp = _choose_later_comp(state.laps_remaining - pit_lap)
+                # If not available NEW, fall back to best_pit_option or any available
+                has_later = any(t.compound == later_comp and t.status == 'NEW' for t in tyres_list)
+                comp_for_later = later_comp if has_later else (best_pit_option or later_comp)
+                later_pace, _ = self.predict_pace(state, comp_for_later, 0, state.laps_remaining - pit_lap)
+                strategic_bonus_later = COMPOUND_STRATEGIC_VALUE[mode].get(comp_for_later, 0.0)
+                total_time_extend_decision = sum(extend_pace) + pit_cost + sum(later_pace) - strategic_bonus_later
+                total_time_extend_physical = sum(extend_pace) + pit_cost + sum(later_pace)
+                if total_time_extend_decision < best_extend_time_decision:
+                    best_extend_time_decision = total_time_extend_decision
+                if total_time_extend_physical < best_extend_time_physical:
+                    best_extend_time_physical = total_time_extend_physical
+                    best_extend_plan = {"pit_in": pit_lap, "compound": comp_for_later}
+        
+        action = "STAY_OUT"
+        target_compound = None
+
+        # Decision Logic: Compare "Box now" vs best extension plan (not 0-stop)
+        reference_time_physical = best_extend_time_physical if best_extend_plan else total_time_stay
+        predicted_gain = reference_time_physical - min_total_time_physical
+        # print(f"DEBUG: total_time_stay={total_time_stay:.2f}, min_total_time={min_total_time:.2f}, pit_cost={pit_cost:.2f}, best_pit_option={best_pit_option}")
+        
+        # Variable threshold based on context
+        track_features = get_track_features(state.track_id)
+        # Track Position Bias: Non-linear penalty based on overtake difficulty
+        # High difficulty tracks (Monza 0.8, Monaco 1.0) require astronomical gains to box
+        # Logic: 2.0s baseline + exponential difficulty factor
+        diff_score = track_features[1]
+        tp_bias = 2.0 + (diff_score ** 4) * 50.0 # 0.8 difficulty -> ~22s penalty; 0.7 -> ~14s penalty
+        
+        gain_threshold = 1.0 + tp_bias
+
+        # Dry undercut trigger: if we're stuck in dirty air while pushing,
+        # lower threshold to allow proactive strategic pivots.
+        if (
+            state.track_status == "GREEN"
+            and state.driving_mode == DrivingMode.PUSH
+            and state.laps_remaining >= 18
+            and state.current_tyre_laps >= 10
+            and (state.traffic_density >= 0.35 or diff_score >= 0.65)
+        ):
+            gain_threshold -= 8.0
+        if is_cheap_pit: 
+            # Under SC/VSC, fresh tyres gain massively at restart
+            # Lower threshold significantly to favor boxing
+            gain_threshold = -4.0 + (tp_bias * 0.15)
+            # Street circuits (track position critical) under VSC still favor cheap stops more than usual
+            STREET_CIRCUITS = {"Singapore", "Singapore Grand Prix", "Monaco", "Monaco Grand Prix", "Azerbaijan Grand Prix", "Las Vegas Grand Prix", "Saudi Arabian Grand Prix"}
+            if any(s in state.track_id for s in STREET_CIRCUITS) and state.track_status == "VSC":
+                gain_threshold = -2.5 + (tp_bias * 0.1)
+            # Explicit SC soft preference for older HARD/MEDIUM with short stints
+            has_new_soft = any(t.compound == "SOFT" and getattr(t, "status", "NEW") == "NEW" for t in tyres_list)
+            if state.track_status == "SC" and has_new_soft and state.current_compound in ["HARD", "MEDIUM"] and state.current_tyre_laps >= 10 and state.laps_remaining <= 20:
+                # Encourage BOX to SOFT at restart
+                gain_threshold -= 2.0
+        # Defensive mode requires extra margin to box
+        if mode == "DEFENSIVE":
+            gain_threshold += 3.0
+        # Early-stint guard: avoid premature boxing when pace is stable and tyres are fresh
+        if state.lap_number < 12 and state.current_tyre_laps < 10 and state.traffic_density < 0.2 and state.track_status == "GREEN":
+            gain_threshold += 5.0
+        
+        # --- Astrix Override Logic ---
+        # If Astrix is screaming for a crossover (e.g. Slick -> Inter), we override the gain logic.
+        astrix_override = False
+        current_cat = "SLICK" if state.current_compound in ["SOFT", "MEDIUM", "HARD"] else "INTER" if state.current_compound in ["INTERMEDIATE", "INTER"] else "WET"
+        rec_cat = weather_intel.get('recommended_compound', 'SLICK')
+        
+        # Additional drying-line override using wetness index & trend
+        wetness_index = float(weather_intel.get('wetness_index', (state.rainfall_intensity * 0.6) + (max(0, 35 - state.track_temp) * 0.05)))
+        drying_flag = bool(weather_intel.get('drying', False))
+
+        # Override conditions:
+        # 1) Drying trend and moderate/dry track (wetness < 0.6)
+        # 2) Track effectively dry (wetness < 0.3)
+        # 3) SLICK regime probability strong and SLICK delta within margin of current
+        slick_prob = float(weather_intel.get('regime_probs', {}).get('SLICK', 0.0))
+        curr_delta = float(deltas.get(current_cat, float('inf'))) if isinstance(deltas, dict) else float('inf')
+        slick_delta = float(deltas.get('SLICK', float('inf'))) if isinstance(deltas, dict) else float('inf')
+
+        drying_conditions = (
+            (drying_flag and wetness_index < 0.6) or
+            (wetness_index < 0.3) or
+            (slick_prob >= 0.5 and slick_delta <= curr_delta + 0.6)
+        )
+
+        if current_cat != "SLICK" and drying_conditions:
+            # Prefer slicks under drying-line physics
+            astrix_override = True
+            gain_threshold = -4.0
+            best_pit_option = choose_slick_target(tyres_list, state.laps_remaining)
+
+        if rec_cat != current_cat:
+            conf = weather_intel.get('confidence', 0.0)
+            pressure = weather_intel.get('crossover_pressure', 0.0)
+            
+            # Trigger if High Confidence OR High Crossover Pressure (Physics confirmation)
+            if conf > 0.65 or pressure > 2.0:
+                # Check if we have the recommended tyre available
+                has_tyre = any(t.compound == rec_cat or (rec_cat=="INTER" and t.compound=="INTERMEDIATE") for t in state.available_tyres)
+                
+                # Fallback: If WET recommended but unavailable, use INTER
+                fallback_cat = None
+                if not has_tyre and rec_cat == "WET":
+                    has_inter = any(t.compound in ["INTER", "INTERMEDIATE"] for t in state.available_tyres)
+                    if has_inter:
+                        fallback_cat = "INTER"
+                        has_tyre = True
+                
+                # Fallback: If INTER recommended but unavailable, check for WET
+                if not has_tyre and rec_cat == "INTER":
+                    has_wet = any(t.compound == "WET" for t in state.available_tyres)
+                    if has_wet:
+                        fallback_cat = "WET"
+                        has_tyre = True
+                
+                if has_tyre:
+                    astrix_override = True
+                    gain_threshold = -999.0 # Force Box
+                    best_pit_option = fallback_cat if fallback_cat else rec_cat
+        
+        # print(f"DEBUG: predicted_gain={predicted_gain:.2f}, gain_threshold={gain_threshold:.2f}, is_at_cliff={is_at_cliff}, is_cheap_pit={is_cheap_pit}, astrix_override={astrix_override}")
+        
+        # Multi-stop planner override: only under SC/VSC or on low track-position circuits
+        planner_override = False
+        planner_best_compound = None
+        try:
+            plan = await self.solve_multi_stop_strategy(state)
+            best_plan_time = float(plan.get("total_race_time", float('inf')))
+            # Guard by track position: allow override if cheap pit OR circuit is not track-position critical and margin >= 5s
+            diff_score = track_features[1]
+            if (is_cheap_pit and best_plan_time < (reference_time_physical - 1.0)) or (diff_score <= 0.8 and best_plan_time < (reference_time_physical - 1.5)):
+                planner_override = True
+                # Parse compound from strategy name if present
+                name = plan.get("recommended_strategy", "")
+                if "->" in name:
+                    parts = [p.strip() for p in name.split("->")]
+                    if parts:
+                        planner_best_compound = parts[-1]
+        except Exception:
+            pass
+
+        # Safety guard: in dry green-flag conditions, do not force a pit through planner
+        # when the direct gain model is explicitly negative and tyre is not near cliff.
+        if (
+            planner_override
+            and not is_cheap_pit
+            and not astrix_override
+            and not is_at_cliff
+            and predicted_gain < 0.0
+        ):
+            planner_override = False
+
+        dry_undercut_override = (
+            state.track_status == "GREEN"
+            and state.driving_mode == DrivingMode.PUSH
+            and state.traffic_density >= 0.75
+            and diff_score >= 0.65
+            and state.current_tyre_laps >= 14
+            and state.laps_remaining >= 18
+            and any(getattr(t, "status", "NEW") == "NEW" for t in tyres_list)
+        )
+
+        if is_at_cliff or predicted_gain > gain_threshold or planner_override or dry_undercut_override:
+            action = "BOX_BOX"
+            target_compound = planner_best_compound or best_pit_option
+            reasoning = f"Sophie AI ({mode}) recommends BOX. Adj. Gain: {predicted_gain:.2f}s."
+            if is_cheap_pit:
+                reasoning += " (SC Opportunity)."
+            if weather_intel['recommended_compound'] != "SLICK":
+                reasoning += f" [ASTRIX: {weather_intel['reason']}]"
+        else:
+            reasoning = f"Sophie AI ({mode}) recommends STAY OUT. Pace is optimal."
+            if weather_intel['risk'] == "HIGH":
+                reasoning += f" [CAUTION: {weather_intel['reason']}]"
+
+        context = {"total_time_stay": total_time_stay, "min_total_time": min_total_time_physical, "best_pit_option": best_pit_option, "engine": "Sophie_LSTM_V6", "mode": mode}
+        
+        envelope = self.build_decision_envelope(
+            state=state,
+            base_action=action,
+            best_pit_compound=best_pit_option, # Use hypothetical best for conditional logic
+            predicted_gain=predicted_gain,
+            pit_loss=pit_cost,
+            weather_intel=weather_intel
+        )
+        
+        # Fault 4: Variance-based confidence dampening
+        if volatility > 0.8:
+            # envelope is a Pydantic model now (DecisionEnvelope), so we can modify fields
+            envelope.confidence = max(0.1, envelope.confidence - 0.15)
+            envelope.reasoning += " [High Volatility]"
+
+        return StrategyOutput(
+            action=action, target_compound=target_compound, remaining_life=max(0, cliff_age - state.current_tyre_laps),
+            predicted_pace_vector=pace_stay[:20], reasoning=f"{reasoning} Click 'Get AI Briefing' for detailed analysis.",
+            tyre_stage=TyreStage.CLIFF if is_at_cliff else TyreStage.STABLE,
+            alert_level="RED" if action == "BOX_BOX" else "GREEN",
+            message=f"Sophie V6 Active | Mode: {mode}", undercut_probability=0.0,
+            meta={
+                "decision_envelope": envelope.model_dump(),
+                "weather_intel": weather_intel
+            }
+        )
+
+    # Synchronous wrapper for threading offload from FastAPI
+    def calculate_strategy_sync(self, state: RaceState) -> StrategyOutput:
+        return asyncio.run(self.calculate_strategy(state))
+
+    # Synchronous wrapper for multi-stop solver to enable thread offload
+    def solve_multi_stop_strategy_sync(self, state: RaceState) -> Dict:
+        return asyncio.run(self.solve_multi_stop_strategy(state))
+```
+
+#### src/track_features.py
+```python
+
+# Track Feature Database
+# Replaces Label Encoding with Feature Vectors for better generalization
+
+TRACK_FEATURES = {
+    "Russian Grand Prix": {"roughness": 0.4, "overtake_difficulty": 0.6, "deg_sensitivity": 0.5, "pit_loss_impact": 0.7},
+    "Monaco Grand Prix": {"roughness": 0.3, "overtake_difficulty": 1.0, "deg_sensitivity": 0.4, "pit_loss_impact": 0.9},
+    "Italian Grand Prix": {"roughness": 0.5, "overtake_difficulty": 0.8, "deg_sensitivity": 0.2, "pit_loss_impact": 0.8},
+    "Singapore Grand Prix": {"roughness": 0.7, "overtake_difficulty": 0.9, "deg_sensitivity": 0.8, "pit_loss_impact": 0.9},
+    "Spanish Grand Prix": {"roughness": 0.8, "overtake_difficulty": 0.7, "deg_sensitivity": 0.9, "pit_loss_impact": 0.6},
+    "Dutch Grand Prix": {"roughness": 0.6, "overtake_difficulty": 0.8, "deg_sensitivity": 0.7, "pit_loss_impact": 0.5},
+    "Japanese Grand Prix": {"roughness": 0.9, "overtake_difficulty": 0.5, "deg_sensitivity": 1.0, "pit_loss_impact": 0.6},
+    "Abu Dhabi Grand Prix": {"roughness": 0.4, "overtake_difficulty": 0.6, "deg_sensitivity": 0.5, "pit_loss_impact": 0.7},
+    "Bahrain Grand Prix": {"roughness": 0.9, "overtake_difficulty": 0.4, "deg_sensitivity": 0.9, "pit_loss_impact": 0.6},
+    "Saudi Arabian Grand Prix": {"roughness": 0.4, "overtake_difficulty": 0.5, "deg_sensitivity": 0.6, "pit_loss_impact": 0.6},
+    "Australian Grand Prix": {"roughness": 0.5, "overtake_difficulty": 0.7, "deg_sensitivity": 0.6, "pit_loss_impact": 0.7},
+    "Emilia Romagna Grand Prix": {"roughness": 0.6, "overtake_difficulty": 0.8, "deg_sensitivity": 0.7, "pit_loss_impact": 0.8},
+    "Miami Grand Prix": {"roughness": 0.5, "overtake_difficulty": 0.6, "deg_sensitivity": 0.6, "pit_loss_impact": 0.7},
+    "Azerbaijan Grand Prix": {"roughness": 0.7, "overtake_difficulty": 0.4, "deg_sensitivity": 0.8, "pit_loss_impact": 0.8},
+    "Canadian Grand Prix": {"roughness": 0.6, "overtake_difficulty": 0.5, "deg_sensitivity": 0.7, "pit_loss_impact": 0.7},
+    "British Grand Prix": {"roughness": 0.7, "overtake_difficulty": 0.6, "deg_sensitivity": 0.8, "pit_loss_impact": 0.5},
+    "Austrian Grand Prix": {"roughness": 0.5, "overtake_difficulty": 0.4, "deg_sensitivity": 0.6, "pit_loss_impact": 0.6},
+    "Hungarian Grand Prix": {"roughness": 0.6, "overtake_difficulty": 0.9, "deg_sensitivity": 0.7, "pit_loss_impact": 0.8},
+    "Belgian Grand Prix": {"roughness": 0.7, "overtake_difficulty": 0.3, "deg_sensitivity": 0.8, "pit_loss_impact": 0.4},
+    "United States Grand Prix": {"roughness": 0.8, "overtake_difficulty": 0.5, "deg_sensitivity": 0.8, "pit_loss_impact": 0.6},
+    "Mexico City Grand Prix": {"roughness": 0.4, "overtake_difficulty": 0.7, "deg_sensitivity": 0.6, "pit_loss_impact": 0.7},
+    "São Paulo Grand Prix": {"roughness": 0.7, "overtake_difficulty": 0.4, "deg_sensitivity": 0.7, "pit_loss_impact": 0.5},
+    "Las Vegas Grand Prix": {"roughness": 0.3, "overtake_difficulty": 0.4, "deg_sensitivity": 0.5, "pit_loss_impact": 0.8},
+    "Shanghai": {"roughness": 0.6, "overtake_difficulty": 0.5, "deg_sensitivity": 0.7, "pit_loss_impact": 0.6},
+    # Default fallback
+    "Generic": {"roughness": 0.5, "overtake_difficulty": 0.5, "deg_sensitivity": 0.5, "pit_loss_impact": 0.5}
+}
+
+def get_track_features(track_name):
+    """
+    Returns feature vector for a given track.
+    Features: [Roughness, OvertakeDiff, DegSens, PitLossImpact]
+    """
+    features = TRACK_FEATURES.get(track_name)
+    if not features:
+        # Fuzzy match or fallback
+        for key in TRACK_FEATURES:
+            if key in track_name:
+                features = TRACK_FEATURES[key]
+                break
+        else:
+            features = TRACK_FEATURES["Generic"]
+            
+    return [
+        features["roughness"],
+        features["overtake_difficulty"],
+        features["deg_sensitivity"],
+        features["pit_loss_impact"]
+    ]
+```
+
+#### src/worker.py
+```python
+import os
+import tensorflow as tf
+# Configure TF for worker process before importing other modules
+# Prevent workers from trying to see all GPUs or consuming all VRAM if relevant
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+from src.sophie_engine import SophieEngine
+from src.lstm_engine import LSTMEngine
+from src.initial.engine import PreRaceEngine
+from src.models import RaceState
+
+# Global instances for the worker process
+_sophie_engine = None
+_legacy_engine = None
+_pre_race_engine = None
+
+def clear_astrix_sessions_task():
+    """
+    Clear Astrix in-memory session state inside a worker process.
+    Returns worker PID so the caller can confirm coverage across workers.
+    """
+    if _sophie_engine is not None and getattr(_sophie_engine, "astrix", None) is not None:
+        _sophie_engine.astrix.sessions = {}
+    return os.getpid()
+
+def init_worker():
+    """
+    Initializer for the ProcessPoolExecutor. 
+    This runs once per process when it starts.
+    """
+    global _sophie_engine, _legacy_engine, _pre_race_engine
+    
+    # Configure threading for the worker process
+    try:
+        # Assuming 1 thread per process for intra/inter op to avoid contention
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+    except Exception:
+        pass
+
+    print(f"Worker process {os.getpid()} initializing engines...")
+    _sophie_engine = SophieEngine()
+    _legacy_engine = LSTMEngine()
+    _pre_race_engine = PreRaceEngine(_sophie_engine)
+    print(f"Worker process {os.getpid()} ready.")
+
+def calculate_strategy_task(state_dict):
+    """
+    Wrapper to run calculate_strategy in the worker.
+    Input is a dict (or Pydantic model dumped to dict/json) to ensure potential serialization issues are minimized,
+    though Pydantic models are usually pickleable.
+    """
+    if isinstance(state_dict, dict):
+        state = RaceState(**state_dict)
+    else:
+        state = state_dict
+
+    # Run the synchronous version
+    return _sophie_engine.calculate_strategy_sync(state)
+
+def calculate_strategy_legacy_task(state_dict):
+    if isinstance(state_dict, dict):
+        state = RaceState(**state_dict)
+    else:
+        state = state_dict
+    return _legacy_engine.calculate_strategy_sync(state)
+
+def solve_multi_stop_task(state_dict):
+    if isinstance(state_dict, dict):
+        state = RaceState(**state_dict)
+    else:
+        state = state_dict
+    return _sophie_engine.solve_multi_stop_strategy_sync(state)
+
+def explain_strategy_task(state_dict, monte_carlo_runs=8):
+    """
+    Complex task for /explain endpoint.
+    Recalculates pace vectors and builds the briefing.
+    """
+    if isinstance(state_dict, dict):
+        state = RaceState(**state_dict)
+    else:
+        state = state_dict
+        
+    engine = _sophie_engine
+    profile = engine.get_driver_profile(state.driver_id)
+    
+    # Main prediction
+    pace_vec, _ = engine.predict_pace(
+        state,
+        state.current_compound,
+        state.current_tyre_laps,
+        state.laps_remaining,
+        monte_carlo_runs=monte_carlo_runs,
+    )
+    total_time_stay = sum(pace_vec)
+    
+    pit_cost = state.pit_window_loss
+    if state.track_status in ["VSC", "SC"]:
+        pit_cost *= 0.65
+        
+    # Evaluate alternatives
+    best_pit_option = None
+    min_pit_total_time = float('inf')
+    
+    results = []
+    for tyre in state.available_tyres:
+        pv, _ = engine.predict_pace(
+            state,
+            tyre.compound,
+            tyre.life_at_start,
+            state.laps_remaining,
+            monte_carlo_runs=monte_carlo_runs,
+        )
+        results.append((tyre, pv))
+        
+    for tyre, pv in results:
+        total_time_pit = pit_cost + sum(pv)
+        if total_time_pit < min_pit_total_time:
+            min_pit_total_time = total_time_pit
+            best_pit_option = tyre.compound
+            
+    context = {
+        "total_time_stay": total_time_stay,
+        "min_pit_total_time": min_pit_total_time,
+        "best_pit_option": best_pit_option,
+        "delta": total_time_stay - min_pit_total_time,
+    }
+    
+    # We need to run the async ai_strategist method synchronously here
+    import asyncio
+    # Since we are in a process, we can run a loop
+    # But ai_strategist.explain_decision might be async. 
+    # Let's check if we can run it.
+    
+    # Actually, let's look at AIStrategist. It's likely using LLM or template.
+    # If it's just sync string formatting, we can call it.
+    # If it's async, we need a loop.
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    return loop.run_until_complete(
+        engine.ai_strategist.explain_decision(state, context, profile, state.race_history)
+    )
+
+def plan_initial_task(request_dict):
+    from src.initial.models import PreRaceRequest
+    if isinstance(request_dict, dict):
+        request = PreRaceRequest(**request_dict)
+    else:
+        request = request_dict
+    return _pre_race_engine.simulate_full_race(request)
+
+def warm_up_worker():
+    """Lightweight callable that ensures the worker finished initializing."""
+    return True
+```
+
+#### index.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F1 Strategic Tyre Module | Personalization</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0a0a0c;
+            --card-bg: rgba(25, 25, 30, 0.8);
+            --accent-red: #e10600;
+            --accent-green: #00ff87;
+            --accent-yellow: #ffeb3b;
+            --accent-blue: #00d2ff;
+            --text-main: #ffffff;
+            --text-dim: #a0a0a0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at 50% -20%, #1a1a2e, #0a0a0c);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 20px;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 24px;
+            letter-spacing: 2px;
+            color: var(--accent-red);
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            background: var(--accent-green);
+            color: #000;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        h2 {
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        input, select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+            font-family: 'JetBrains Mono', monospace;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            background: var(--accent-red);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 10px;
+            text-transform: uppercase;
+            box-shadow: 0 4px 15px rgba(225, 6, 0, 0.3);
+        }
+
+        button:hover {
+            background: #ff1e1e;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(225, 6, 0, 0.4);
+        }
+
+        .result-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stage-banner {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--accent-green);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stage-name {
+            font-size: 24px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .recommendation {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stay { color: var(--accent-blue); }
+        .box { color: var(--accent-red); }
+
+        .reasoning {
+            font-size: 14px;
+            color: var(--text-dim);
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+
+        .message-box {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 18px;
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            font-size: 14px;
+            line-height: 1.6;
+            max-height: 220px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            color: #d1d1d1;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 15px;
+        }
+
+        .metric-card {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 22px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .health-bar-container {
+            width: 100%;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .health-bar-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-yellow), var(--accent-red));
+            transition: transform 0.5s ease;
+            transform-origin: left;
+        }
+
+        #paceChart {
+            margin-top: 20px;
+        }
+
+        .loading {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .alert-RED { border-left-color: var(--accent-red); }
+        .alert-YELLOW { border-left-color: var(--accent-yellow); }
+        .alert-GREEN { border-left-color: var(--accent-green); }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <header>
+            <div class="logo">SOPHIE <span style="font-weight: 300;">V6 AI</span></div>
+            <div style="display: flex; gap: 20px; align-items: center;">
+                <span style="background: rgba(187, 134, 252, 0.2); color: #bb86fc; font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; border: 1px solid #bb86fc; font-weight: bold; letter-spacing: 1px;">SEQUENCE ENGINE ACTIVE</span>
+                <a href="initial_strategy.html" style="color: var(--text-dim); text-decoration: none; font-size: 0.9rem; border: 1px solid rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px;">Pre-Race Planner</a>
+                <div class="status-badge" id="api_status">System Online</div>
+            </div>
+        </header>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Telemetry Input</h2>
+                
+                <div class="input-group">
+                    <label>Driver Profile</label>
+                    <select id="driver_id">
+                        <option value="VER">Max Verstappen (Aggressive)</option>
+                        <option value="PER">Sergio Perez (Smooth)</option>
+                        <option value="HAM">Lewis Hamilton (Balanced)</option>
+                        <option value="LEC">Charles Leclerc (Qualy Pace)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Track / Event</label>
+                    <select id="track_id">
+                        <option value="Spanish Grand Prix" selected>Spanish Grand Prix (Barcelona)</option>
+                        <option value="Bahrain Grand Prix">Bahrain Grand Prix (Sakhir)</option>
+                        <option value="Saudi Arabian Grand Prix">Saudi Arabian Grand Prix (Jeddah)</option>
+                        <option value="Monaco Grand Prix">Monaco Grand Prix (Monte Carlo)</option>
+                        <option value="Austrian Grand Prix">Austrian Grand Prix (Spielberg)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>St 전략 Mode</label>
+                    <select id="driving_mode">
+                        <option value="MANAGEMENT">MANAGEMENT (Saving)</option>
+                        <option value="NORMAL" selected>NORMAL (Race)</option>
+                        <option value="PUSH">PUSH (Hammertime)</option>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="input-group">
+                        <label>Lap</label>
+                        <input type="number" id="current_lap" value="45">
+                    </div>
+                    <div class="input-group">
+                        <label>Total Laps</label>
+                        <input type="number" id="total_laps" value="66">
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Compound</label>
+                    <select id="current_compound">
+                        <option value="SOFT">SOFT (C3)</option>
+                        <option value="MEDIUM" selected>MEDIUM (C2)</option>
+                        <option value="HARD">HARD (C1)</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label>Tyre Age (Laps)</label>
+                    <input type="number" id="tyre_age" value="15">
+                </div>
+
+                <div class="input-group">
+                    <label>Track Status</label>
+                    <select id="track_status">
+                        <option value="GREEN">GREEN FLAG</option>
+                        <option value="VSC">VSC</option>
+                        <option value="SC">SAFETY CAR</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Recent Lap Times (Last 5, comma separated)</label>
+                    <input type="text" id="last_laps" value="80.5, 80.7, 80.9, 81.2, 81.5">
+                </div>
+
+                <div class="input-group">
+                    <label>Track Temp (°C)</label>
+                    <input type="number" id="track_temp" value="35">
+                </div>
+
+                <div class="input-group">
+                    <label>Pit Stop History</label>
+                    <div id="pit_history_list" style="margin-bottom: 10px; font-size: 12px; color: var(--text-dim); background: rgba(0,0,0,0.1); padding: 8px; border-radius: 4px;">
+                        No pits recorded yet.
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 5px;">
+                        <input type="number" id="pit_lap" placeholder="Lap" style="padding: 5px;">
+                        <select id="pit_comp" style="padding: 5px;">
+                            <option value="SOFT">SOFT</option>
+                            <option value="MEDIUM">MEDIUM</option>
+                            <option value="HARD">HARD</option>
+                        </select>
+                        <button onclick="addPit()" style="padding: 5px 10px; background: var(--accent-blue); border: none; color: white; border-radius: 4px; cursor: pointer;">+</button>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>Race Event Log (AI Memory)</label>
+                    <textarea id="race_history" style="width: 100%; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 4px; padding: 5px; height: 60px;" placeholder="e.g. Lap 10: SC deployed. Lap 15: VER pitted for Hards."></textarea>
+                </div>
+                <button onclick="updateStrategy()" style="width: 100%; background: var(--accent-red); margin-top: 10px;">Analyze Strategy</button>
+            </div>
+
+            <div class="result-panel">
+                <div id="stage_banner" class="stage-banner alert-GREEN">
+                    <div>
+                        <div class="metric-label">Current Status</div>
+                        <div id="tyre_stage" class="stage-name">Stable Peak</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="metric-label">Strategy Action</div>
+                        <div id="rec_action" class="recommendation stay">STAY OUT</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="metric-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Rem. Life</div>
+                            <div id="met_life" class="metric-value">12</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Next Lap</div>
+                            <div id="met_pace" class="metric-value">1:19.4</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Track Temp</div>
+                            <div id="met_temp" class="metric-value">35°C</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Driving Index</div>
+                            <div id="met_mode" class="metric-value" style="font-size: 16px;">NORMAL</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Undercut Prob.</div>
+                            <div id="met_undercut" class="metric-value" style="color: var(--accent-blue);">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="health-bar-container">
+                        <div id="health_bar" class="health-bar-fill"></div>
+                    </div>
+
+                    <div id="message_box" class="message-box" style="margin-top: 20px;">
+                        Waiting for sensor data...
+                    </div>
+                    
+                    <div id="rec_reason" class="reasoning">
+                        Initial analysis...
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>Simulated Pace Projection (Next 20 Laps)</h2>
+                    <canvas id="paceChart" height="120"></canvas>
+                </div>
+
+                <!-- AI Briefing Section -->
+                <div class="card" style="border-top: 2px solid var(--accent-blue); background: linear-gradient(180deg, rgba(0,210,255,0.05) 0%, rgba(0,0,0,0) 100%);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                            <span style="color: var(--accent-blue);">✦</span> AI Strategic Briefing
+                        </h2>
+                        <button id="ai_btn" onclick="getAIBriefing()" style="background: var(--accent-blue); padding: 8px 15px; font-size: 12px;">Get AI Briefing</button>
+                    </div>
+                    <div id="ai_briefing_content" class="message-box" style="min-height: 60px; display: flex; align-items: center; justify-content: center; color: var(--text-dim);">
+                        Click the button above to generate a deep strategic analysis from the AI Strategist.
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2 style="margin: 0;">Multi-Stop Strategy Planner (Sophie V6)</h2>
+                        <button onclick="planMultiStop()" style="background: #bb86fc; color: #000; font-weight: bold; padding: 8px 15px; border-radius: 4px; border: none; cursor: pointer;">Run Simulation</button>
+                    </div>
+                    <div id="multi_stop_results" style="display: none;">
+                        <table style="width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); text-align: left;">
+                                    <th style="padding: 8px; color: var(--text-dim);">Strategy Name</th>
+                                    <th style="padding: 8px; color: var(--text-dim);">Total Time (s)</th>
+                                    <th style="padding: 8px; color: var(--text-dim);">Gap</th>
+                                    <th style="padding: 8px; color: var(--text-dim);">Stints</th>
+                                </tr>
+                            </thead>
+                            <tbody id="multi_stop_table_body">
+                                <!-- Results injected here -->
+                            </tbody>
+                        </table>
+                        <div id="best_strat_msg" style="margin-top: 15px; padding: 10px; background: rgba(187, 134, 252, 0.1); border-left: 3px solid #bb86fc; font-size: 13px; color: #e1e1e1;">
+                            Run simulation to see optimal path.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let paceChart;
+        let pitHistory = [];
+
+        function addPit() {
+            const lap = parseInt(document.getElementById('pit_lap').value);
+            const comp = document.getElementById('pit_comp').value;
+            if (isNaN(lap)) return;
+            
+            pitHistory.push({ lap: lap, compound: comp, tyre_age_at_pit: 0 }); // Age at pit is optional for UI
+            pitHistory.sort((a, b) => a.lap - b.lap);
+            
+            renderPitHistory();
+        }
+
+        function renderPitHistory() {
+            const list = document.getElementById('pit_history_list');
+            if (pitHistory.length === 0) {
+                list.innerHTML = "No pits recorded yet.";
+                return;
+            }
+            list.innerHTML = pitHistory.map((p, i) => `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; padding: 2px 5px; background: rgba(255,255,255,0.05); border-radius: 3px;">
+                    <span>Lap ${p.lap}: <b>${p.compound}</b></span>
+                    <span onclick="removePit(${i})" style="color: var(--accent-red); cursor: pointer;">&times;</span>
+                </div>
+            `).join('');
+        }
+
+        function removePit(index) {
+            pitHistory.splice(index, 1);
+            renderPitHistory();
+        }
+
+        async function updateStrategy() {
+            const btn = document.querySelector('button[onclick="updateStrategy()"]');
+            btn.classList.add('loading');
+            
+            const currentLap = parseInt(document.getElementById('current_lap').value);
+            const totalLaps = parseInt(document.getElementById('total_laps').value);
+            const tyreAge = parseInt(document.getElementById('tyre_age').value);
+
+            // Calculate compounds used: Initial compound + all compounds from pit history
+            const used = ["SOFT"]; // Assumed starter for demo, should be more dynamic
+            pitHistory.forEach(p => { if(!used.includes(p.compound)) used.push(p.compound); });
+            if(!used.includes(document.getElementById('current_compound').value)) used.push(document.getElementById('current_compound').value);
+
+            const lastLapsStr = document.getElementById('last_laps').value;
+            const lastLaps = lastLapsStr.split(',').map(l => parseFloat(l.trim())).filter(l => !isNaN(l));
+
+            const payload = {
+                driver_id: document.getElementById('driver_id').value,
+                driving_mode: document.getElementById('driving_mode').value,
+                track_id: document.getElementById('track_id').value,
+                lap_number: currentLap,
+                total_laps: totalLaps,
+                laps_remaining: totalLaps - currentLap,
+                current_compound: document.getElementById('current_compound').value,
+                current_tyre_laps: tyreAge,
+                compounds_used_in_race: used,
+                pit_stop_history: pitHistory,
+                available_tyres: [
+                    { compound: "HARD", status: "NEW", life_at_start: 0 },
+                    { compound: "MEDIUM", status: "NEW", life_at_start: 0 }
+                ],
+                track_status: document.getElementById('track_status').value,
+                track_temp: parseFloat(document.getElementById('track_temp').value),
+                race_history: document.getElementById('race_history').value.split('\n').filter(l => l.trim() !== ""),
+                pit_window_loss: 22.0,
+                last_lap_time: lastLaps[lastLaps.length - 1] || 80.5,
+                last_5_lap_times: lastLaps,
+                fuel_load_kg: 100 - (currentLap * 1.5)
+            };
+
+            try {
+                const response = await fetch('http://localhost:8000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                
+                // Update UI: Header Banner
+                const banner = document.getElementById('stage_banner');
+                banner.className = `stage-banner alert-${data.alert_level}`;
+                
+                document.getElementById('tyre_stage').innerText = data.tyre_stage.replace('_', ' ');
+                
+                const recAction = document.getElementById('rec_action');
+                recAction.innerText = data.action.replace('_', ' ');
+                recAction.className = 'recommendation ' + (data.action === 'STAY_OUT' ? 'stay' : 'box');
+                
+                // Update Metrics
+                document.getElementById('met_life').innerText = data.remaining_life;
+                document.getElementById('met_pace').innerText = data.predicted_pace_vector[0].toFixed(3) + 's';
+                document.getElementById('met_temp').innerText = payload.track_temp + '°C';
+                document.getElementById('met_mode').innerText = payload.driving_mode;
+                document.getElementById('met_undercut').innerText = (data.undercut_probability * 100).toFixed(0) + '%';
+                
+                // Health Bar (Simulated based on age - max ~40 laps)
+                const health = Math.max(0, 100 - (tyreAge * 2.5));
+                document.getElementById('health_bar').style.transform = `scaleX(${health/100})`;
+                
+                // Reasoning and Message
+                document.getElementById('message_box').innerText = data.message;
+                document.getElementById('rec_reason').innerText = data.reasoning;
+
+                updateChart(data.predicted_pace_vector);
+            } catch (e) {
+                console.error(e);
+                document.getElementById('api_status').innerText = "API Offline";
+                document.getElementById('api_status').style.background = "var(--accent-red)";
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+
+        function updateChart(vector) {
+            const ctx = document.getElementById('paceChart').getContext('2d');
+            const startLap = parseInt(document.getElementById('current_lap').value);
+            const labels = vector.map((_, i) => `L${startLap + i}`);
+            
+            if (paceChart) paceChart.destroy();
+            
+            paceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Projected Lap Time',
+                        data: vector,
+                        borderColor: '#e10600',
+                        backgroundColor: 'rgba(225, 6, 0, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        borderWidth: 3,
+                        pointRadius: 2,
+                        pointBackgroundColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    interaction: { intersect: false, mode: 'index' },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#a0a0a0', font: { family: 'JetBrains Mono' } }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#a0a0a0', font: { family: 'JetBrains Mono' } }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function getAIBriefing() {
+            const btn = document.getElementById('ai_btn');
+            const content = document.getElementById('ai_briefing_content');
+            
+            btn.disabled = true;
+            btn.innerText = "Analyzing...";
+            content.style.opacity = '0.5';
+            content.innerText = "Consulting with Chief Strategist Gemini...";
+
+            // Calculate compounds used properly
+            const used = ["SOFT"];
+            pitHistory.forEach(p => { if(!used.includes(p.compound)) used.push(p.compound); });
+            if(!used.includes(document.getElementById('current_compound').value)) used.push(document.getElementById('current_compound').value);
+
+            const lastLapsStr = document.getElementById('last_laps').value;
+            const lastLaps = lastLapsStr.split(',').map(l => parseFloat(l.trim())).filter(l => !isNaN(l));
+
+            const payload = {
+                lap_number: parseInt(document.getElementById('current_lap').value),
+                total_laps: 66,
+                laps_remaining: 66 - parseInt(document.getElementById('current_lap').value),
+                current_compound: document.getElementById('current_compound').value,
+                current_tyre_laps: parseInt(document.getElementById('tyre_age').value),
+                compounds_used_in_race: used,
+                pit_stop_history: pitHistory,
+                driver_id: document.getElementById('driver_id').value,
+                driving_mode: document.getElementById('driving_mode').value,
+                track_id: document.getElementById('track_id').value,
+                available_tyres: [
+                    { compound: "HARD", status: "NEW", life_at_start: 0 },
+                    { compound: "MEDIUM", status: "NEW", life_at_start: 0 }
+                ],
+                track_status: document.getElementById('track_status').value,
+                track_temp: parseFloat(document.getElementById('track_temp').value),
+                race_history: document.getElementById('race_history').value.split('\n').filter(l => l.trim() !== ""),
+                pit_window_loss: 22.0,
+                last_lap_time: lastLaps[lastLaps.length - 1] || 80.5,
+                last_5_lap_times: lastLaps,
+                fuel_load_kg: 100 - (parseInt(document.getElementById('current_lap').value) * 1.5)
+            };
+
+            try {
+                const response = await fetch('http://localhost:8000/explain', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                console.log("Raw AI Briefing Response:", data);
+                
+                let briefingText = data.briefing;
+
+                // Handle the specific array/object format provided by the user
+                if (Array.isArray(briefingText)) {
+                    briefingText = briefingText.map(item => {
+                        if (typeof item === 'object' && item.text) return item.text;
+                        if (typeof item === 'string') return item;
+                        return JSON.stringify(item);
+                    }).join('\n');
+                } else if (typeof briefingText === 'object' && briefingText !== null) {
+                    if (briefingText.text) briefingText = briefingText.text;
+                    else briefingText = JSON.stringify(briefingText, null, 2);
+                }
+                
+                console.log("Parsed Strategy Briefing:", briefingText);
+                
+                content.innerText = briefingText || "No briefing received from strategist.";
+                content.style.opacity = '1';
+                content.style.color = 'white';
+                content.style.justifyContent = 'flex-start'; // Align text to top
+                content.style.textAlign = 'left';
+            } catch (e) {
+                console.error("Briefing Error:", e);
+                content.innerText = "Briefing failed: " + e.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Get AI Briefing";
+            }
+        }
+
+        async function planMultiStop() {
+            const btn = document.querySelector('button[onclick="planMultiStop()"]');
+            btn.innerText = "Simulating...";
+            btn.disabled = true;
+
+            const used = ["SOFT"];
+            pitHistory.forEach(p => { if(!used.includes(p.compound)) used.push(p.compound); });
+            if(!used.includes(document.getElementById('current_compound').value)) used.push(document.getElementById('current_compound').value);
+            const lastLaps = document.getElementById('last_laps').value.split(',').map(l => parseFloat(l.trim())).filter(l => !isNaN(l));
+
+            const totalLaps = parseInt(document.getElementById('total_laps').value);
+            const currentLap = parseInt(document.getElementById('current_lap').value);
+
+            const payload = {
+                lap_number: currentLap,
+                total_laps: totalLaps,
+                laps_remaining: totalLaps - currentLap,
+                current_compound: document.getElementById('current_compound').value,
+                current_tyre_laps: parseInt(document.getElementById('tyre_age').value),
+                compounds_used_in_race: used,
+                pit_stop_history: pitHistory,
+                driver_id: document.getElementById('driver_id').value,
+                driving_mode: document.getElementById('driving_mode').value,
+                track_id: document.getElementById('track_id').value,
+                available_tyres: [
+                    { compound: "HARD", status: "NEW", life_at_start: 0 },
+                    { compound: "MEDIUM", status: "NEW", life_at_start: 0 }
+                ],
+                track_status: document.getElementById('track_status').value,
+                track_temp: parseFloat(document.getElementById('track_temp').value),
+                race_history: [],
+                pit_window_loss: 22.0,
+                last_lap_time: lastLaps[lastLaps.length - 1] || 80.5,
+                last_5_lap_times: lastLaps,
+                fuel_load_kg: 40.0
+            };
+
+            try {
+                const response = await fetch('http://localhost:8000/plan/multi-stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                renderMultiStopResults(data);
+            } catch(e) {
+                console.error(e);
+                alert("Simulation failed.");
+            } finally {
+                btn.innerText = "Run Simulation";
+                btn.disabled = false;
+            }
+        }
+
+        function renderMultiStopResults(data) {
+            const container = document.getElementById('multi_stop_results');
+            container.style.display = 'block';
+            const tbody = document.getElementById('multi_stop_table_body');
+            const bestTime = data.total_race_time;
+            
+            const allStrats = [
+                { name: data.recommended_strategy, total_time: data.total_race_time, compounds: [], type: 'Best' },
+                ...data.alternatives
+            ].filter((v,i,a) => a.findIndex(t=>(t.name === v.name))===i);
+
+            allStrats.sort((a,b) => a.total_time - b.total_time);
+
+            tbody.innerHTML = allStrats.map(s => {
+                const gap = s.total_time - bestTime;
+                const gapStr = gap === 0 ? '<span style="color:var(--accent-green); font-weight:bold;">WINNER</span>' : `+${gap.toFixed(2)}s`;
+                return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 8px;">${s.name}</td>
+                    <td style="padding: 8px;">${s.total_time.toFixed(1)}</td>
+                    <td style="padding: 8px;">${gapStr}</td>
+                    <td style="padding: 8px; font-size: 10px;">${(s.compounds || []).join('→')}</td>
+                </tr>
+                `;
+            }).join('');
+
+            document.getElementById('best_strat_msg').innerHTML = `
+                <b>Recommendation:</b> ${data.recommended_strategy}<br>
+                Sophie V6 calculates this is the fastest route to the finish line, accounting for multi-step degradation.
+            `;
+        }
+
+        async function initDrivers() {
+            try {
+                const response = await fetch('http://localhost:8000/drivers');
+                const drivers = await response.json();
+                const select = document.getElementById('driver_id');
+                select.innerHTML = '';
+                drivers.sort().forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.innerText = d;
+                    if (d === 'VER') opt.selected = true;
+                    select.appendChild(opt);
+                });
+            } catch (e) { console.error("Could not fetch drivers", e); }
+        }
+
+        // Init
+        window.onload = async () => {
+            await initDrivers();
+            updateStrategy();
+        };
+    </script>
+</body>
+</html>
+```
+
+#### main.py
+```python
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+import asyncio
+import httpx
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing
+import os
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict, Any
+from src.models import RaceState, StrategyOutput
+from src.strategy_engine import StrategyEngine
+from src.sophie_engine import SophieEngine
+from src.lstm_engine import LSTMEngine
+from src.initial.models import PreRaceRequest, InitialStrategyPlan
+from src.initial.engine import PreRaceEngine
+from src.worker import (
+    init_worker,
+    calculate_strategy_task,
+    calculate_strategy_legacy_task,
+    solve_multi_stop_task,
+    explain_strategy_task,
+    plan_initial_task,
+    warm_up_worker,
+    clear_astrix_sessions_task,
+)
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(title="SOPHIE F1 V6 (Multi-Season Sequence AI)")
+# ... existing middleware ...
+
+# Initialize Process Pool
+# We use a global pool to be shared across requests
+pool = None
+pool_worker_count = 0
+
+
+def _resolve_worker_count() -> int:
+    configured = os.getenv("WORKER_PROCESSES")
+    if configured:
+        try:
+            value = int(configured)
+            if value > 0:
+                return value
+        except ValueError:
+            print("[Workers] Invalid WORKER_PROCESSES value; falling back to auto-detection.")
+
+    cpu_total = os.cpu_count() or 4
+    return max(1, cpu_total - 1)
+
+import psutil
+def log_resources():
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024 / 1024
+    cpu = psutil.cpu_percent(interval=None)
+    print(f"[Resource] PID: {os.getpid()} | CPU: {cpu}% | RAM: {mem:.1f}MB")
+
+@app.on_event("startup")
+async def startup_event():
+    global pool, pool_worker_count
+    max_workers = _resolve_worker_count()
+    pool_worker_count = max_workers
+    mp_ctx = multiprocessing.get_context("spawn")
+    pool = ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=init_worker,
+        mp_context=mp_ctx,
+    )
+
+    loop = asyncio.get_running_loop()
+    warmups = [loop.run_in_executor(pool, warm_up_worker) for _ in range(max_workers)]
+    await asyncio.gather(*warmups)
+    print(f"ProcessPoolExecutor ready with {max_workers} workers (spawn context).")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global pool
+    if pool:
+        pool.shutdown(wait=True)
+
+# Simple timing middleware for performance visibility
+@app.middleware("http")
+async def timing_middleware(request, call_next):
+    start = asyncio.get_event_loop().time()
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = (asyncio.get_event_loop().time() - start) * 1000
+        path = request.url.path
+        # Minimal console log; replace with proper logger if desired
+        print(f"[Perf] {path} handled in {duration_ms:.1f} ms")
+        if duration_ms > 2000: # Log resources for slow requests
+            log_resources()
+
+# Initialize Engines (Main Process - for metadata only)
+# Note: Heavy computation is offloaded to worker processes.
+engine = SophieEngine() # Primary (V6)
+legacy_engine = LSTMEngine() # Legacy (V5)
+
+pre_race_engine = PreRaceEngine(engine)
+
+# Enable CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+GO_INGESTOR_URL = os.getenv("GO_INGESTOR_URL", "http://localhost:8080/ingest")
+
+async def handover_to_go(payload: dict):
+    """
+    Non-blocking handover to the Go telemetry service.
+    """
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(GO_INGESTOR_URL, json=payload, timeout=2.0)
+            if response.status_code != 202:
+                print(f"[Go-Handover] Unexpected status: {response.status_code}")
+        except Exception as e:
+            print(f"[Go-Handover] Failed to connect: {e}")
+
+# Sequence Engine is now active
+
+@app.get("/drivers")
+def get_drivers():
+    if engine.profiles_df is not None:
+        return list(engine.profiles_df.index)
+    return ["VER", "HAM", "LEC", "PER"]
+
+@app.get("/")
+def read_root():
+    return {"status": "Pit Wall Online"}
+
+@app.post("/predict", response_model=StrategyOutput)
+async def predict_strategy(state: RaceState, background_tasks: BackgroundTasks):
+    try:
+        # Offload heavy computation to a worker process for performance
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(pool, calculate_strategy_task, state.model_dump())
+        
+        # Handover telemetry to Go for persistence
+        background_tasks.add_task(handover_to_go, {
+            "state": state.model_dump(),
+            "prediction": result.model_dump(),
+            "timestamp": asyncio.get_event_loop().time()
+        })
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict/v5", response_model=StrategyOutput)
+async def predict_strategy_legacy(state: RaceState):
+    """Legacy Endpoint: Access the original LSTM V5 Engine."""
+    try:
+        # Offload heavy computation to a worker process
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(pool, calculate_strategy_legacy_task, state.model_dump())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/calibrate")
+def calibrate_model(actual_lap_time: float, state: RaceState):
+    """Calibrate the model drift based on real telemetry."""
+    try:
+        # Update local engine (metadata/feedback loop)
+        # Note: This only affects the main process. Worker processes won't see this immediately.
+        # Future TODO: Use shared memory or Redis for calibration state.
+        engine.update_calibration(actual_lap_time, state)
+        return {"status": "success", "offset": engine.calibration_offset}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/explain")
+async def explain_strategy(state: RaceState):
+    try:
+        # Offload explanation generation to worker process
+        loop = asyncio.get_running_loop()
+        ai_briefing = await loop.run_in_executor(pool, explain_strategy_task, state.model_dump())
+        return {"briefing": ai_briefing}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/plan_initial", response_model=List[InitialStrategyPlan])
+async def plan_initial_strategy(request: PreRaceRequest):
+    try:
+        loop = asyncio.get_running_loop()
+        plans = await loop.run_in_executor(pool, plan_initial_task, request.model_dump())
+        return plans
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/plan/multi-stop")
+async def plan_multi_stop_strategy(state: RaceState):
+    """
+    Sophie V6: Simulate full race permutations (1-stop vs 2-stop).
+    Returns optimal strategy path and alternatives.
+    """
+    try:
+        # Offload multi-stop simulation to worker process
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(pool, solve_multi_stop_task, state.model_dump())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/reset_sessions")
+async def reset_sessions():
+    """
+    Clears Astrix session memory across worker processes.
+    Useful for deterministic scenario batch runs.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        target_workers = max(1, pool_worker_count or _resolve_worker_count())
+        seen_pids = set()
+
+        # Broadcast reset and continue until we've seen all workers or reached a safe attempt cap.
+        max_attempts = target_workers * 6
+        for _ in range(max_attempts):
+            pid = await loop.run_in_executor(pool, clear_astrix_sessions_task)
+            seen_pids.add(int(pid))
+            if len(seen_pids) >= target_workers:
+                break
+
+        return {
+            "status": "ok",
+            "workers_cleared": len(seen_pids),
+            "expected_workers": target_workers,
+            "worker_pids": sorted(seen_pids),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+#### src/astrix_engine.py
+```python
+import joblib
+import os
+import pandas as pd
+import numpy as np
+from typing import Dict, Optional
+
+class AstrixEngine:
+    """
+    ASTRIX - Weather & Crossover Intelligence Engine.
+    Predicts regime deltas and identifies crossover points.
+    """
+    def __init__(self):
+        self.model_dir = "src/models/astrix"
+        self.models = {}
+        self.regime_model = None
+        self.features = []
+        # Session State: {driver_id: {pressure: 0, rain_history: [], wetness: 0.0}}
+        self.sessions = {}
+        self.load_models()
+        
+    def load_models(self):
+        if not os.path.exists(self.model_dir):
+            print("ASTRIX: Waiting for model synchronization...")
+            return
+            
+        try:
+            self.models['SLICK'] = joblib.load(f"{self.model_dir}/astrix_slick_model.joblib")
+            self.models['INTER'] = joblib.load(f"{self.model_dir}/astrix_inter_model.joblib")
+            self.models['WET'] = joblib.load(f"{self.model_dir}/astrix_wet_model.joblib")
+            self.regime_model = joblib.load(f"{self.model_dir}/astrix_regime_model.joblib")
+            self.features = joblib.load(f"{self.model_dir}/astrix_features.joblib")
+            print("ASTRIX: Multi-Regime Registry & Classifier Loaded.")
+        except Exception as e:
+            print(f"ASTRIX Load Error: {e}")
+        
+    def _get_session_state(self, driver_id):
+        if driver_id not in self.sessions:
+            self.sessions[driver_id] = {
+                "crossover_pressure": 0.0,
+                "rain_history": [],
+                "current_track_wetness": 0.0,
+                "wetness_history": [],
+                "last_lap": -1
+            }
+        return self.sessions[driver_id]
+
+    def get_weather_intelligence(self, state) -> Dict:
+        """
+        Analyzes current weather and context to provide regime guidance.
+        """
+        if not self.models:
+            return {
+                "recommended_compound": "SLICK",
+                "delta_gain": 0.0,
+                "risk": "LOW",
+                "confidence": 0.5,
+                "reason": "Registry offline. Defaulting to SLICK."
+            }
+        
+        session = self._get_session_state(state.driver_id)
+
+        # If lap number goes backwards, treat it as a new scenario run and reset state.
+        # This avoids first-run/second-run drift when replaying the same story script.
+        if state.lap_number < session.get("last_lap", -1):
+            session["crossover_pressure"] = 0.0
+            session["rain_history"] = []
+            session["current_track_wetness"] = 0.0
+            session["wetness_history"] = []
+        session["last_lap"] = state.lap_number
+        
+        # 1. Update Rain History (Rolling Window 5)
+        # We append current rainfall intensity
+        session['rain_history'].append(state.rainfall_intensity)
+        if len(session['rain_history']) > 5:
+            session['rain_history'].pop(0)
+            
+        rain_accumulated = sum(session['rain_history'])
+        
+        # 2. Track Wetness Physics (Decay & Accumulation)
+        # Wetness increases with rainfall, decreases with track temp/wind & simple decay
+        # New input + existing wetness decay
+        is_sc = 1 if state.track_status in ["SC", "VSC"] else 0
+        decay_factor = 0.92 if state.track_status == "GREEN" else 0.97
+        
+        # Physics: Drying rate depends on car count (displacement) and SC speed
+        car_count = 20 - int(state.lap_number // 15) # Heuristic: cars retire over time
+        drying_rate = 0.05 + (car_count * 0.002) # More cars = faster drying line
+        if is_sc == 1: drying_rate *= 0.3 # Slow cars dry less
+        
+        # Input from current rain
+        # Shared constants for wetness alignment
+        WETNESS_RAIN_COEFF = 0.6
+        WETNESS_COLD_COEFF = 0.05
+        water_input = (state.rainfall_intensity * WETNESS_RAIN_COEFF)
+        
+        # Cooling / Evaporation effect
+        evaporation = (max(0, state.track_temp - 25) * 0.01) + drying_rate
+        if state.rainfall_intensity > 0: evaporation = 0 # Rain overcomes drying
+        
+        # Update wetness state
+        new_wetness = (session['current_track_wetness'] * decay_factor) + water_input - evaporation
+        session['current_track_wetness'] = max(0.0, new_wetness)
+        
+        # One-shot initialization fix: If we mistakenly started at 0 but it's pouring
+        if len(session['rain_history']) <= 1 and state.rainfall_intensity > 0 and session['current_track_wetness'] < 0.5:
+             session['current_track_wetness'] = max(state.rainfall_intensity * 0.6, session['current_track_wetness'])
+
+        # Dynamic Smoothness
+        # Smoothness degrades in wet (drivers struggle) and with tyre age
+        base_smoothness = 0.85
+        dynamic_smoothness = base_smoothness - (session['current_track_wetness'] * 0.1) - (state.current_tyre_laps * 0.002)
+        
+        # Align with Training Data: Add Cold Track penalty to the Feature (not the state)
+        # Loader uses: (Rain * 0.6) + (max(0, 35 - T) * 0.05)
+        # We have the dynamic rain part in 'current_track_wetness', now we add the static cold part
+        aligned_wetness_index = session['current_track_wetness'] + (max(0, 35 - state.track_temp) * WETNESS_COLD_COEFF)
+        # Track wetness index history for drying detection
+        session['wetness_history'].append(float(aligned_wetness_index))
+        if len(session['wetness_history']) > 5:
+            session['wetness_history'].pop(0)
+
+        input_data = pd.DataFrame([{
+            "RainAccumulated": rain_accumulated, # Replaces RainfallIntensity
+            "AirTemp": state.air_temp,
+            "TrackTemp": state.track_temp,
+            "Humidity": state.humidity,
+            "TrackWetnessIndex": aligned_wetness_index,
+            "TyreLife": state.current_tyre_laps,
+            "LapNumber": state.lap_number,
+            "IsSC": is_sc,
+            "DriverSmoothness": dynamic_smoothness,
+            "CarCount": car_count
+        }])
+
+        # 3. Regime Classification (Probabilistic Gating)
+        regime_probs = self.regime_model.predict_proba(input_data)[0] # [P(Slick), P(Inter), P(Wet)]
+        regime_map = {0: "SLICK", 1: "INTER", 2: "WET"}
+        likely_regime_idx = np.argmax(regime_probs)
+        likely_regime = regime_map[likely_regime_idx]
+        regime_confidence = regime_probs[likely_regime_idx]
+
+        # 4. Predict Pace Envelope (Conditional)
+        deltas = {
+            "SLICK": float(self.models['SLICK'].predict(input_data)[0]),
+            "INTER": float(self.models['INTER'].predict(input_data)[0]),
+            "WET": float(self.models['WET'].predict(input_data)[0])
+        }
+
+        # 5. Crossover Detection & Decision Logic
+        theoretical_best = min(deltas, key=deltas.get)
+        current_compound_category = "SLICK" if state.current_compound in ["SOFT", "MEDIUM", "HARD"] else state.current_compound # Fix for mapped types
+        if state.current_compound in ["INTERMEDIATE", "INTER"]: current_compound_category = "INTER"
+        if state.current_compound == "WET": current_compound_category = "WET"
+        
+        delta_gain = deltas.get(current_compound_category, 0.0) - deltas[theoretical_best]
+
+        # --- PHYSICS-BASED WETNESS OVERRIDE ---
+        # Problem: The regressor may not have learned correct wetness penalties.
+        # Solution: If wetness is extreme AND classifier says wet regime, FORCE the recommendation.
+        # This bypasses regressor failure in obvious rain conditions.
+        physics_override = None
+        if aligned_wetness_index > 1.5 and likely_regime != "SLICK":
+            # Heavy rain + classifier agrees -> Trust physics over regressor
+            physics_override = likely_regime
+        elif aligned_wetness_index > 2.5:
+            # Extreme rain -> Always use WET regardless of classifier noise
+            physics_override = "WET"
+        elif state.rainfall_intensity > 1.0 and state.track_temp < 20:
+            # Cold rain conditions -> INTER is almost always right
+            physics_override = "INTER"
+
+        # Gated Logic: Only switch if Classifier AND Regressor agree, or if Classifier is VERY sure
+        recommended = current_compound_category
+        
+        # Stability Pressure
+        if theoretical_best != current_compound_category:
+            # If gain is extreme, jump pressure immediately
+            pressure_jump = 3.0 if delta_gain > 10.0 else 1.5 if delta_gain > 2.0 else 1.0
+            
+            if likely_regime == theoretical_best:
+                 session['crossover_pressure'] += pressure_jump * regime_confidence
+            else:
+                 session['crossover_pressure'] += 0.5
+        else:
+             session['crossover_pressure'] = max(0, session['crossover_pressure'] - 0.7)
+
+        # Physics override takes precedence
+        if physics_override and physics_override != current_compound_category:
+            recommended = physics_override
+            session['crossover_pressure'] = max(session['crossover_pressure'], 3.0) # Force high pressure
+        elif session['crossover_pressure'] >= 2.5:
+            recommended = theoretical_best
+
+        # 6. Risk & Confidence
+        risk = "LOW"
+        if delta_gain > 4.0: risk = "MEDIUM"
+        if regime_confidence < 0.6: risk = "HIGH" # Classifier uncertain
+        
+        confidence = float(regime_confidence)
+        
+        if recommended != current_compound_category:
+             # If recommending switch, use probability as confidence
+             confidence =confidence
+        
+        # 7. Reasoning
+        reason = f"Regime Probability: {likely_regime} ({int(confidence*100)}%)."
+        if session['current_track_wetness'] > 0.5:
+             reason += f" Wetness: {session['current_track_wetness']:.2f}."
+        
+        if recommended != current_compound_category:
+            reason += f" switch to {recommended} advised. Gain: {delta_gain:.1f}s."
+
+        # Drying-line detection: rainfall absent AND wetness index trending down
+        drying_trend = False
+        if len(session['wetness_history']) >= 3:
+            last = session['wetness_history'][-1]
+            prev = session['wetness_history'][-2]
+            prev2 = session['wetness_history'][-3]
+            slope_recent = (last - prev)
+            slope_prev = (prev - prev2)
+            # Require negative trend and no active rain accumulation
+            if (slope_recent < -0.02 or (slope_recent + slope_prev) < -0.04) and rain_accumulated == 0.0:
+                drying_trend = True
+
+        return {
+            "recommended_compound": recommended,
+            "delta_gain": float(delta_gain),
+            "risk": risk,
+            "confidence": round(confidence, 2),
+            "reason": reason,
+            "deltas": deltas,
+            "crossover_pressure": float(session['crossover_pressure']),
+            "regime_probs": {k: float(v) for k, v in zip(["SLICK", "INTER", "WET"], regime_probs)},
+            "wetness_index": float(aligned_wetness_index),
+            "drying": bool(state.track_status == "GREEN" and drying_trend)
+        }
+```

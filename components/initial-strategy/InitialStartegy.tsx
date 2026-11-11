@@ -23,7 +23,7 @@ type InitialPlan = {
 
 type Props = { driver?: Option; circuit?: Option; defaultLaps?: number }
 
-const API_URL = process.env.NEXT_PUBLIC_STRATEGY_API_URL ?? "http://localhost:8000"
+const API_URL = process.env.NEXT_PUBLIC_AI_API_URL ?? "http://localhost:8000"
 
 // --- CHANGE: Enhanced compound colors with clear contrast & font weight
 const compoundTone: Record<string, string> = {
