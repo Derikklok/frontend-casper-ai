@@ -7,44 +7,23 @@ import {
   RadioTower,
   SlidersHorizontal,
 } from "lucide-react"
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 import { useGetCircuits, useGetDrivers } from "@/api/endpoints/asset-controller/asset-controller"
 import { useGetActiveSequence } from "@/api/endpoints/race-sequence-controller/race-sequence-controller"
-import { seedOf, trackPath, TrackGlyph, Tyre } from "@/components/race-sequence-management/visuals"
+import { seedOf, trackPath, TrackGlyph } from "@/components/race-sequence-management/visuals"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-
-/* ------------------------------ sample data ------------------------------ */
-// Deterministic so server and client render the same chart.
-const telemetryData = Array.from({ length: 40 }).map((_, i) => ({
-  distance: i * 50,
-  speed: Math.round(180 + Math.sin(i / 3) * 60 + (i > 10 && i < 20 ? 60 : 0) - (i > 30 ? 90 : 0)),
-}))
-
-const timingData = [
-  { p: 1, name: "VER", gap: "Leader", tire: "Medium" },
-  { p: 2, name: "NOR", gap: "+1.243", tire: "Medium" },
-  { p: 3, name: "GHO", gap: "+3.104", tire: "Soft", us: true },
-  { p: 4, name: "LEC", gap: "+4.882", tire: "Hard" },
-  { p: 5, name: "PIA", gap: "+5.120", tire: "Medium" },
-]
-
-/* ---------------------------------- page --------------------------------- */
 
 export default function EngineerDashboard() {
   const router = useRouter()
 
   return (
-    <main>
+    <main className="min-h-full bg-gradient-to-br from-background via-background to-primary/5">
       <CommandDeck onConfigure={() => router.push("/admin/dashboard/race-sequence")} />
-      <SamplePreview />
     </main>
   )
 }
-
-/* ------------------------- real, data-backed section ------------------------ */
 
 function CommandDeck({ onConfigure }: { onConfigure: () => void }) {
   const router = useRouter()
@@ -59,161 +38,205 @@ function CommandDeck({ onConfigure }: { onConfigure: () => void }) {
   const seqDriver = drivers.find((d) => d.id === seq?.driverId)
 
   const statusStyle: Record<string, string> = {
-    ACTIVE: "bg-green-500/15 text-green-500",
-    PLANNED: "bg-yellow-500/15 text-yellow-500",
-    COMPLETED: "bg-muted text-muted-foreground",
+    ACTIVE: "bg-green-500/20 text-green-400 border-green-500/30",
+    PLANNED: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+    COMPLETED: "bg-muted/50 text-muted-foreground border-border/40",
   }
 
   return (
-    <section className="grid gap-5 p-5 lg:h-[calc(100svh-3.5rem)] lg:grid-cols-12 lg:grid-rows-1">
-      {/* Active sequence */}
-      <div className="relative flex min-h-[26rem] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:col-span-7 lg:min-h-0">
-        {seqQuery.isLoading ? (
-          <div className="flex-1 animate-pulse bg-muted/30" />
-        ) : !seq ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-            <TrackGlyph seed={seedOf("empty")} className="h-32 w-44 text-muted-foreground/30" />
-            <div>
-              <h1 className="font-heading text-2xl font-semibold">No active sequence</h1>
-              <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                Choose a driver, circuit, car and tyres to open the pit wall.
-              </p>
-            </div>
-            <Button onClick={onConfigure} className="gap-2">
-              <SlidersHorizontal className="h-4 w-4" />
-              Set up a sequence
-            </Button>
+    <section className="p-4 lg:p-6">
+      <div className="mx-auto max-w-[1920px]">
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="font-heading text-3xl font-bold tracking-tight">Command Center</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Race sequence management & live telemetry</p>
           </div>
-        ) : (
-          <>
-            <LiveStage
-              circuitName={seq.circuitName}
-              circuitId={seq.circuitId}
-              driverName={seq.driverName}
-              carName={seq.carName}
-              status={seq.status}
-              statusClass={statusStyle[seq.status ?? ""] ?? "bg-muted text-muted-foreground"}
-              driverNumber={seqDriver?.driverNumber}
-              totalLaps={seq.defaultLapCount ?? 50}
-            />
-
-            <div className="grid grid-cols-2 divide-x divide-border/60 border-t border-border/60 sm:grid-cols-4">
-              <Fact label="Laps" value={seq.defaultLapCount ?? "–"} />
-              <Fact label="Forecast" value={seq.weatherInfo ?? "–"} />
-              <Fact label="Driver" value={seq.driverName ?? "–"} />
-              <div className="px-5 py-4">
-                <p className="text-xs text-muted-foreground">Tyres</p>
-                <div className="mt-2 flex gap-1.5">
-                  {seq.selectedCompounds?.length
-                    ? seq.selectedCompounds.map((c) => <Tyre key={c} compound={c} size={26} />)
-                    : "–"}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 border-t border-border/60 p-5">
-              <Button size="lg" className="h-12 flex-1 gap-2 text-base" onClick={() => router.push("/admin/dashboard/pit-wall")}>
-                <RadioTower className="h-5 w-5" />
-                Open pit wall
-              </Button>
-              <Button size="lg" variant="outline" className="h-12 gap-2" onClick={onConfigure}>
-                <SlidersHorizontal className="h-4 w-4" />
-                Edit sequence
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Registry */}
-      <div className="flex min-h-[24rem] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:col-span-5 lg:min-h-0">
-        <div className="flex items-center justify-between border-b border-border/60 p-2">
-          <div role="tablist" className="flex gap-1">
-            {(
-              [
-                ["drivers", "Drivers", drivers.length],
-                ["circuits", "Circuits", circuits.length],
-              ] as const
-            ).map(([id, label, count]) => (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={tab === id}
-                onClick={() => setTab(id)}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                  tab === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {label}
-                <span className="rounded-full bg-background px-2 text-xs tabular-nums">{count}</span>
-              </button>
-            ))}
-          </div>
-          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground" onClick={() => router.push("/admin/dashboard/assets")}>
-            Manage
-            <ChevronRight className="h-4 w-4" />
+          <Button onClick={onConfigure} className="gap-2" size="lg">
+            <SlidersHorizontal className="h-4 w-4" />
+            Configure
           </Button>
         </div>
 
-        <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-2">
-          {tab === "drivers" ? (
-            driversQuery.isLoading ? (
-              <ListSkeleton />
-            ) : drivers.length === 0 ? (
-              <Empty text="No drivers yet. Add them under Asset Management." />
+        {/* Main Grid */}
+        <div className="grid gap-4 lg:grid-cols-12 lg:grid-rows-2">
+          {/* Active Sequence - Large Card */}
+          <div className="lg:col-span-7 lg:row-span-2">
+            {seqQuery.isLoading ? (
+              <div className="h-full min-h-96 animate-pulse rounded-2xl border border-border/40 bg-card/50" />
+            ) : !seq ? (
+              <div className="flex h-96 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/40 bg-card/30 p-8 text-center">
+                <TrackGlyph seed={seedOf("empty")} className="h-24 w-32 text-muted-foreground/20" />
+                <h2 className="mt-4 font-heading text-xl font-semibold">No Active Sequence</h2>
+                <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+                  Set up a driver, circuit, and car to begin.
+                </p>
+                <Button onClick={onConfigure} className="mt-4 gap-2">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Create Sequence
+                </Button>
+              </div>
             ) : (
-              drivers.map((d) => (
-                <Row key={d.id} active={seq?.driverId === d.id}>
-                  <span className="w-10 text-right font-heading text-2xl font-bold tabular-nums">{d.driverNumber ?? "–"}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{d.fullName ?? d.broadcastName ?? "Unknown"}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {d.acronym ?? "---"}
-                      {d.countryCode ? `, ${d.countryCode}` : ""}
-                    </p>
-                  </div>
-                </Row>
-              ))
-            )
-          ) : circuitsQuery.isLoading ? (
-            <ListSkeleton />
-          ) : circuits.length === 0 ? (
-            <Empty text="No circuits yet. Add them under Asset Management." />
-          ) : (
-            circuits.map((c) => (
-              <Row key={c.id} active={seq?.circuitId === c.id}>
-                <TrackGlyph seed={seedOf(c.id ?? c.name ?? "")} className="h-10 w-12 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{c.name ?? "Unknown"}</p>
-                  <p className="truncate text-sm text-muted-foreground">
-                    {c.country ?? "–"}
-                    {c.length ? `, ${c.length} km` : ""}
-                    {c.numberOfCorners ? `, ${c.numberOfCorners} corners` : ""}
-                  </p>
+              <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-card via-card to-primary/5 shadow-lg">
+                <LiveStage
+                  circuitName={seq.circuitName}
+                  circuitId={seq.circuitId}
+                  driverName={seq.driverName}
+                  carName={seq.carName}
+                  status={seq.status}
+                  statusClass={statusStyle[seq.status ?? ""] ?? "bg-muted/50 text-muted-foreground border-border/40"}
+                  driverNumber={seqDriver?.driverNumber}
+                  totalLaps={seq.defaultLapCount ?? 50}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid gap-4 lg:col-span-5 lg:grid-cols-2">
+            {seq && (
+              <>
+                <StatCard label="Total Laps" value={seq.defaultLapCount ?? "–"} icon="🏁" />
+                <StatCard label="Weather" value={seq.weatherInfo ?? "–"} icon="🌤️" />
+                <StatCard label="Driver" value={seq.driverName ?? "–"} icon="👤" />
+                <StatCard label="Car" value={seq.carName ?? "–"} icon="🏎️" />
+              </>
+            )}
+          </div>
+
+          {/* Registry Tabs */}
+          <div className="lg:col-span-5">
+            <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/40 bg-card shadow-lg">
+              {/* Tab Header */}
+              <div className="flex items-center justify-between border-b border-border/40 bg-muted/30 px-4 py-3">
+                <div role="tablist" className="flex gap-2">
+                  {(
+                    [
+                      ["drivers", "Drivers", drivers.length],
+                      ["circuits", "Circuits", circuits.length],
+                    ] as const
+                  ).map(([id, label, count]) => (
+                    <button
+                      key={id}
+                      role="tab"
+                      aria-selected={tab === id}
+                      onClick={() => setTab(id)}
+                      className={cn(
+                        "rounded-lg px-3 py-1.5 text-xs font-semibold transition-all",
+                        tab === id
+                          ? "bg-primary/20 text-primary ring-1 ring-primary/40"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {label}
+                      <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-background text-[10px] font-bold">
+                        {count}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-              </Row>
-            ))
-          )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => router.push("/admin/dashboard/assets")}
+                >
+                  Manage
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+
+              {/* Tab Content */}
+              <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto p-3">
+                {tab === "drivers" ? (
+                  driversQuery.isLoading ? (
+                    <ListSkeleton />
+                  ) : drivers.length === 0 ? (
+                    <Empty text="No drivers configured." />
+                  ) : (
+                    <div className="space-y-2">
+                      {drivers.map((d) => (
+                        <Row key={d.id} active={seq?.driverId === d.id}>
+                          <span className="w-8 text-right font-heading text-lg font-bold tabular-nums text-primary">
+                            {d.driverNumber ?? "–"}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{d.fullName ?? d.broadcastName ?? "Unknown"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {d.acronym ?? "---"}
+                              {d.countryCode ? ` • ${d.countryCode}` : ""}
+                            </p>
+                          </div>
+                        </Row>
+                      ))}
+                    </div>
+                  )
+                ) : circuitsQuery.isLoading ? (
+                  <ListSkeleton />
+                ) : circuits.length === 0 ? (
+                  <Empty text="No circuits configured." />
+                ) : (
+                  <div className="space-y-2">
+                    {circuits.map((c) => (
+                      <Row key={c.id} active={seq?.circuitId === c.id}>
+                        <TrackGlyph seed={seedOf(c.id ?? c.name ?? "")} className="h-8 w-10 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">{c.name ?? "Unknown"}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {c.country ?? "–"}
+                            {c.length ? ` • ${c.length} km` : ""}
+                            {c.numberOfCorners ? ` • ${c.numberOfCorners} corners` : ""}
+                          </p>
+                        </div>
+                      </Row>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Action Footer */}
+              {seq && (
+                <div className="border-t border-border/40 bg-muted/20 p-3">
+                  <Button
+                    size="sm"
+                    className="w-full gap-2"
+                    onClick={() => router.push("/admin/dashboard/pit-wall")}
+                  >
+                    <RadioTower className="h-4 w-4" />
+                    Open Pit Wall
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </section>
   )
 }
 
-/* ------------------------- simulated live telemetry ------------------------- */
+function StatCard({ label, value, icon }: { label: string; value: string | number; icon: string }) {
+  return (
+    <div className="flex flex-col rounded-xl border border-border/40 bg-card/60 p-4 shadow-sm hover:bg-card/80 transition-colors">
+      <div className="flex items-center justify-between">
+        <span className="text-2xl">{icon}</span>
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</span>
+      </div>
+      <p className="mt-2 truncate font-heading text-lg font-bold text-foreground">{value}</p>
+    </div>
+  )
+}
 
 type Telemetry = { speed: number; gear: number; throttle: number; brake: number; lap: number; sector: number; lastLap: string; trace: number[] }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
-const LAP_MS = 20000 // a demo lap takes 20 s so the motion is easy to read
+const LAP_MS = 20000
 
 function formatLap(seconds: number) {
   const m = Math.floor(seconds / 60)
   return `${m}:${(seconds - m * 60).toFixed(3).padStart(6, "0")}`
 }
 
-/** Drives a car marker around the circuit outline and produces a plausible telemetry stream. */
 function useSimulatedTelemetry(seed: number, totalLaps: number) {
   const pathRef = useRef<SVGPathElement>(null)
   const dotRef = useRef<SVGCircleElement>(null)
@@ -286,105 +309,78 @@ function LiveStage(props: {
   const spark = t.trace.map((v, i) => `${((i * 100) / 59).toFixed(1)},${(30 - (v / 340) * 28).toFixed(1)}`).join(" ")
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-gradient-to-br from-primary/15 via-transparent to-transparent p-7">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Active sequence</p>
-        {props.status && <Badge className={cn("rounded-md border-0", props.statusClass)}>{props.status}</Badge>}
+    <div className="relative flex flex-1 flex-col overflow-hidden p-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+            </span>
+            <p className="text-xs font-semibold text-green-400 uppercase tracking-widest">Live</p>
+          </div>
+          <h1 className="mt-2 font-heading text-3xl font-bold leading-tight">
+            {props.circuitName ?? "Circuit not set"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {props.driverName ?? "Driver not set"} • {props.carName ?? "Car not set"}
+          </p>
+        </div>
+        {props.status && (
+          <Badge className={cn("rounded-lg border px-3 py-1 text-xs font-bold", props.statusClass)}>
+            {props.status}
+          </Badge>
+        )}
       </div>
-      <h1 className="mt-3 max-w-md font-heading text-4xl font-semibold leading-tight xl:text-5xl">
-        {props.circuitName ?? "Circuit not set"}
-      </h1>
-      <p className="mt-2 text-muted-foreground">
-        {props.driverName ?? "Driver not set"} in {props.carName ?? "car not set"}
-      </p>
 
-      {/* Track with moving car */}
+      {/* Track Visualization */}
       <svg
         viewBox="0 0 100 100"
         fill="none"
         aria-hidden
-        className="pointer-events-none absolute -right-4 top-4 h-[80%] max-h-96 w-1/2 text-primary"
+        className="pointer-events-none absolute -right-8 top-12 h-[70%] max-h-80 w-1/2 text-primary/30"
       >
-        <path d={d} stroke="currentColor" strokeOpacity={0.22} strokeWidth={9} strokeLinejoin="round" />
-        <path ref={pathRef} d={d} stroke="currentColor" strokeWidth={2.5} strokeLinejoin="round" />
-        <circle ref={dotRef} r={3.6} fill="white" stroke="currentColor" strokeWidth={2} cx={-10} cy={-10} />
+        <path d={d} stroke="currentColor" strokeOpacity={0.15} strokeWidth={9} strokeLinejoin="round" />
+        <path ref={pathRef} d={d} stroke="currentColor" strokeWidth={2} strokeLinejoin="round" opacity={0.6} />
+        <circle ref={dotRef} r={3} fill="currentColor" cx={-10} cy={-10} />
       </svg>
+
+      {/* Driver Number Watermark */}
       {props.driverNumber != null && (
-        <span className="pointer-events-none absolute bottom-2 right-6 font-heading text-[7rem] font-bold leading-none tabular-nums text-foreground/10 xl:text-[9rem]">
+        <span className="pointer-events-none absolute bottom-0 right-0 font-heading text-[8rem] font-black leading-none text-foreground/5">
           {props.driverNumber}
         </span>
       )}
 
-      {/* Telemetry readout */}
-      <div className="relative mt-auto pt-8">
-        <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75 motion-reduce:hidden" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-          </span>
-          Live preview, simulated data
+      {/* Telemetry Grid */}
+      <div className="relative mt-auto grid grid-cols-2 gap-3 pt-6 sm:grid-cols-4">
+        <TelemetryBox label="Speed" value={`${t.speed} km/h`} color="text-cyan-400" />
+        <TelemetryBox label="Gear" value={t.gear} color="text-amber-400" />
+        <TelemetryBox label="Throttle" value={`${t.throttle}%`} color="text-green-400" />
+        <TelemetryBox label="Brake" value={`${t.brake}%`} color="text-red-400" />
+        <TelemetryBox label="Lap" value={`${t.lap} / ${props.totalLaps}`} color="text-blue-400" />
+        <TelemetryBox label="Sector" value={t.sector} color="text-purple-400" />
+        <TelemetryBox label="Last Lap" value={t.lastLap} color="text-yellow-400" />
+        <div className="rounded-lg border border-border/40 bg-muted/30 p-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</p>
+          <p className="mt-1 text-sm font-bold text-green-400">Ready</p>
         </div>
-
-        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-          <div>
-            <p className="font-heading text-6xl font-bold leading-none tabular-nums xl:text-7xl" aria-label={`Speed ${t.speed} kilometres per hour`}>
-              {t.speed}
-              <span className="ml-2 text-base font-normal text-muted-foreground">km/h</span>
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-muted-foreground">Gear</p>
-            <p className="font-heading text-4xl font-bold tabular-nums">{t.gear}</p>
-          </div>
-          <div className="w-28 space-y-2 text-xs text-muted-foreground">
-            <Meter label="Throttle" value={t.throttle} className="bg-green-500" />
-            <Meter label="Brake" value={t.brake} className="bg-red-500" />
-          </div>
-          <div className="text-sm">
-            <p className="tabular-nums">
-              <span className="text-muted-foreground">Lap </span>
-              {t.lap}
-              <span className="text-muted-foreground"> / {props.totalLaps}</span>
-            </p>
-            <p className="tabular-nums">
-              <span className="text-muted-foreground">Last </span>
-              {t.lastLap}
-            </p>
-            <div className="mt-1.5 flex gap-1" aria-label={`Sector ${t.sector}`}>
-              {[1, 2, 3].map((s) => (
-                <span key={s} className={cn("h-1.5 w-8 rounded-full", s === t.sector ? "bg-primary" : s < t.sector ? "bg-primary/40" : "bg-muted")} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-5 h-12 w-full max-w-md text-primary" aria-hidden>
-          <polyline points={spark} fill="none" stroke="currentColor" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
-        </svg>
       </div>
+
+      {/* Speed Trace */}
+      <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="mt-4 h-10 w-full text-primary/40" aria-hidden>
+        <polyline points={spark} fill="none" stroke="currentColor" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+      </svg>
     </div>
   )
 }
 
-function Meter({ label, value, className }: { label: string; value: number; className: string }) {
+function TelemetryBox({ label, value, color }: { label: string; value: string | number; color: string }) {
   return (
-    <div>
-      <div className="mb-1 flex justify-between">
-        <span>{label}</span>
-        <span className="tabular-nums">{value}%</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full transition-[width] duration-100", className)} style={{ width: `${value}%` }} />
-      </div>
-    </div>
-  )
-}
-
-function Fact({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="min-w-0 px-5 py-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate font-heading text-lg font-semibold tabular-nums">{value}</p>
+    <div className="rounded-lg border border-border/40 bg-muted/20 p-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+      <p className={cn("mt-1 font-heading text-lg font-bold", color)}>{value}</p>
     </div>
   )
 }
@@ -393,12 +389,18 @@ function Row({ active, children }: { active: boolean; children: React.ReactNode 
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-muted/50",
-        active && "bg-primary/10 ring-1 ring-primary/40"
+        "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+        active
+          ? "bg-primary/15 ring-1 ring-primary/40 shadow-sm"
+          : "hover:bg-muted/40"
       )}
     >
       {children}
-      {active && <span className="shrink-0 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">In sequence</span>}
+      {active && (
+        <span className="ml-auto shrink-0 rounded-md bg-primary/20 px-2 py-0.5 text-xs font-bold text-primary">
+          Active
+        </span>
+      )}
     </div>
   )
 }
@@ -407,96 +409,16 @@ function ListSkeleton() {
   return (
     <div className="space-y-2">
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="h-14 animate-pulse rounded-xl bg-muted/40" />
+        <div key={i} className="h-12 animate-pulse rounded-lg bg-muted/30" />
       ))}
     </div>
   )
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="m-2 rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">{text}</p>
-}
-
-/* ----------------------- sample preview (not live data) ---------------------- */
-
-function SamplePreview() {
   return (
-    <section className="border-t border-border/60 px-5 pb-10 pt-8">
-      <div className="mx-auto max-w-[1600px]">
-        <div className="mb-5 flex items-baseline gap-3">
-          <h2 className="font-heading text-xl font-semibold">Pit wall preview</h2>
-          <p className="text-sm text-muted-foreground">Sample data. Live telemetry is on the pit wall.</p>
-        </div>
-        <div className="grid gap-5 lg:grid-cols-12">
-          <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-5">
-            <p className="font-heading text-lg font-semibold">Undercut window open</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              LEC’s tyres are dropping off. Pitting now gives a 68% chance of taking the position.
-            </p>
-            <dl className="mt-4 divide-y divide-border/60 text-sm">
-              <PreviewRow label="Pit loss" value="21.4 s" />
-              <PreviewRow label="Gap at exit" value="+1.2 s ahead of LEC" />
-              <PreviewRow label="Suggested tyre" value={<Tyre compound="Hard" size={24} />} />
-            </dl>
-            <div className="mt-5 flex gap-3">
-              <Button className="h-11 flex-[2]">Confirm box</Button>
-              <Button variant="outline" className="h-11 flex-1">
-                Hold
-              </Button>
-            </div>
-          </div>
-
-          <div className="min-w-0 rounded-2xl border border-border bg-card p-5 lg:col-span-4">
-            <p className="font-heading text-lg font-semibold">Speed trace</p>
-            <div className="mt-3 h-[210px] min-w-0">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={210}>
-                <AreaChart data={telemetryData} margin={{ top: 8, right: 0, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="speedFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="distance" tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }} stroke="rgba(255,255,255,0.2)" />
-                  <YAxis domain={[0, 350]} tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 10 }} stroke="rgba(255,255,255,0.2)" />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: "rgba(0,0,0,0.85)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8 }}
-                    labelStyle={{ display: "none" }}
-                  />
-                  <Area type="monotone" dataKey="speed" stroke="var(--color-primary)" strokeWidth={2} fill="url(#speedFill)" isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card lg:col-span-3">
-            <p className="border-b border-border/60 p-5 pb-4 font-heading text-lg font-semibold">Timing</p>
-            <ul className="divide-y divide-border/50 text-sm">
-              {timingData.map((d) => (
-                <li
-                  key={d.p}
-                  className={cn("flex items-center gap-3 px-5 py-2.5", d.us && "bg-primary/10")}
-                >
-                  <span className="w-4 tabular-nums text-muted-foreground">{d.p}</span>
-                  <span className="flex-1 font-medium">{d.name}</span>
-                  <span className="tabular-nums text-muted-foreground">{d.gap}</span>
-                  <Tyre compound={d.tire} size={20} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function PreviewRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium">{value}</dd>
-    </div>
+    <p className="rounded-lg border border-dashed border-border/40 px-4 py-8 text-center text-xs text-muted-foreground">
+      {text}
+    </p>
   )
 }

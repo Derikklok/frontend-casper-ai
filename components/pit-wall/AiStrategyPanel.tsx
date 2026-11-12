@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState, type MutableRefObject, type ReactNode } from "react"
-import { BrainCircuit, Loader2, Plus, Sparkles, Trash2 } from "lucide-react"
+import { BrainCircuit, Loader2, Plus, Sparkles, Trash2, Check, XCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,7 +35,10 @@ type Props = {
   recentLapTimes: string[]
   predictedPaceVector: number[]
   onPrediction: (result: StrategyResponse) => void;
-   payloadRef?: MutableRefObject<(() => Record<string, unknown>) | null>
+  payloadRef?: MutableRefObject<(() => Record<string, unknown>) | null>
+  onExecute?: () => void
+  onReject?: () => void
+  isDispatching?: boolean
 }
 
 const apiUrl = process.env.NEXT_PUBLIC_AI_API_URL ?? "http://localhost:8000"
@@ -70,6 +73,9 @@ export default function AiStrategyPanel({
   predictedPaceVector,
   onPrediction,
   payloadRef,
+  onExecute,
+  onReject,
+  isDispatching = false,
 }: Props) {
   const [drivingMode, setDrivingMode] = useState("NORMAL")
   const [currentLap, setCurrentLap] = useState(initialLap)
@@ -435,6 +441,31 @@ export default function AiStrategyPanel({
                 {predictedPaceVector.length} projected laps loaded into the
                 telemetry chart.
               </p>
+            )}
+            {(onExecute || onReject) && (
+              <div className="flex gap-2 pt-2">
+                <Button
+                  onClick={onExecute}
+                  disabled={isDispatching}
+                  className="flex-1 h-10 gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase"
+                >
+                  {isDispatching ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                  {isDispatching ? "Executing..." : "Execute"}
+                </Button>
+                <Button
+                  onClick={onReject}
+                  disabled={isDispatching}
+                  variant="outline"
+                  className="flex-1 h-10 gap-2 border-red-500/40 bg-red-950/20 text-red-400 hover:bg-red-900/40 font-mono text-xs font-bold uppercase"
+                >
+                  <XCircle className="h-4 w-4" />
+                  Reject
+                </Button>
+              </div>
             )}
           </div>
         )}

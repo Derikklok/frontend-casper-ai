@@ -463,14 +463,15 @@ export default function PitWallPage() {
             recentLapTimes={recentLapTimes}
             predictedPaceVector={predictedPaceVector}
             onPrediction={(result) => {
-              // Update pace vector for charts
               setPredictedPaceVector(result.predicted_pace_vector ?? [])
-              // Stage prediction for review without sending it directly to pit crew yet
               setPendingAiPrediction(result)
               toast.info("New strategy recommendation received", {
-                description: `Action: ${result.action} — Review and Authorize above.`,
+                description: `Action: ${result.action} — Review and Authorize.`,
               })
             }}
+            onExecute={handleExecuteStrategy}
+            onReject={handleRejectStrategy}
+            isDispatching={isDispatching}
           />
         </section>
 

@@ -20,6 +20,7 @@ const NAV_ITEMS: { name: string; icon: ElementType; href: string }[] = [
   { name: "Dashboard", icon: LayoutDashboard, href: "/admin/dashboard" },
   { name: "Race Seq", icon: Flag, href: "/admin/dashboard/race-sequence" },
   { name: "Pit Wall", icon: RadioTower, href: "/admin/dashboard/pit-wall" },
+  { name: "Pit Crew Live", icon: RadioTower, href: "/admin/dashboard/pit-crew-live" },
   {
     name: "Strategy Matrix",
     icon: BrainCircuit,
