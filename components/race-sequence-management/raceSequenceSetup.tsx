@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, type ReactNode } from "react"
-import { Car, Check, CheckCircle2, Loader2, Play, RefreshCcw, Save } from "lucide-react"
+import { Car, Check, CheckCircle2, CircleDot, Flag, Loader2, MapPin, Play, RefreshCcw, Save, Users, Wrench } from "lucide-react"
 
 import { useGetCars, useGetCircuits, useGetDrivers } from "@/api/endpoints/asset-controller/asset-controller"
 import {
@@ -17,6 +17,8 @@ import {
   RaceSequenceSaveRequestSequenceType,
   type RaceSequenceSaveRequest,
 } from "@/api/models"
+import { Panel } from "@/components/dashboard/widgets"
+import { seedOf, trackPath, TrackGlyph, Tyre } from "@/components/race-sequence-management/visuals"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,12 +31,12 @@ import { cn } from "@/lib/utils"
 const COMPOUND_OPTIONS = ["Soft", "Medium", "Hard", "Wet", "Inters"] as const
 type Compound = (typeof COMPOUND_OPTIONS)[number]
 
-const COMPOUND_STYLE: Record<Compound, { letter: string; ring: string; note: string }> = {
-  Soft: { letter: "S", ring: "border-red-500", note: "Fastest, wears quickly" },
-  Medium: { letter: "M", ring: "border-yellow-400", note: "Balanced pace and life" },
-  Hard: { letter: "H", ring: "border-zinc-200", note: "Slowest, longest stints" },
-  Inters: { letter: "I", ring: "border-green-500", note: "Damp or drying track" },
-  Wet: { letter: "W", ring: "border-blue-500", note: "Heavy rain" },
+const COMPOUND_NOTE: Record<Compound, string> = {
+  Soft: "Fastest, wears quickly",
+  Medium: "Balanced pace and life",
+  Hard: "Slowest, longest stints",
+  Inters: "Damp or drying track",
+  Wet: "Heavy rain",
 }
 
 const DEFAULT_CAR_CONFIGURATION: CarConfigDto = {
@@ -113,10 +115,6 @@ function hashLabel(value: string) {
   return value.split("").reduce((total, character) => total + character.charCodeAt(0), 0)
 }
 
-function seedOf(value: string) {
-  return value.split("").reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
-}
-
 function getRaceDistance(sequenceType: SequenceType) {
   return sequenceType === RaceSequenceSaveRequestSequenceType.RACE_WEEKEND ? 305 : 120
 }
@@ -147,31 +145,6 @@ function getErrorMessage(error: unknown, fallback: string) {
   return response?.response?.data?.message ?? response?.message ?? fallback
 }
 
-/** Deterministic closed-loop outline so every circuit gets its own recognisable silhouette. */
-function trackPath(seed: number) {
-  let s = seed || 1
-  const rnd = () => {
-    s = (s * 1664525 + 1013904223) % 4294967296
-    return s / 4294967296
-  }
-  const n = 9
-  const pts = Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2
-    const r = 18 + rnd() * 18
-    return [50 + Math.cos(a) * r * 1.25, 50 + Math.sin(a) * r * 0.95]
-  })
-  const mid = (a: number[], b: number[]) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
-  const f = (n: number) => n.toFixed(1)
-  const start = mid(pts[n - 1], pts[0])
-  let d = `M ${f(start[0])} ${f(start[1])}`
-  for (let i = 0; i < n; i++) {
-    const c = pts[i]
-    const m = mid(pts[i], pts[(i + 1) % n])
-    d += ` Q ${f(c[0])} ${f(c[1])} ${f(m[0])} ${f(m[1])}`
-  }
-  return d + " Z"
-}
-
 /* -------------------------------------------------------------------------- */
 /*  Main component                                                            */
 /* -------------------------------------------------------------------------- */
@@ -192,15 +165,15 @@ export default function RaceSequenceSetup() {
 
   const drivers = useMemo(
     () => (driversQuery.data?.result ?? []).filter((d): d is DriverDto & { id: string } => Boolean(d.id)),
-    [driversQuery.data?.result]
+    [driversQuery.data?.result],
   )
   const circuits = useMemo(
     () => (circuitsQuery.data?.result ?? []).filter((c): c is CircuitDto & { id: string } => Boolean(c.id)),
-    [circuitsQuery.data?.result]
+    [circuitsQuery.data?.result],
   )
   const cars = useMemo(
     () => (carsQuery.data?.result ?? []).filter((c): c is CarDto & { id: string } => Boolean(c.id)),
-    [carsQuery.data?.result]
+    [carsQuery.data?.result],
   )
 
   const effectiveDriverId = form.driverId || activeSequence?.driverId || getFirstAvailableId(drivers)
@@ -221,8 +194,7 @@ export default function RaceSequenceSetup() {
     (selectedCircuit ? getWeatherSnapshot(selectedCircuit, sequenceType) : "")
   const lapCount = form.customLapCount || suggestedLapCount
 
-  const driverLabel =
-    selectedDriver?.fullName || activeSequence?.driverName || selectedDriver?.acronym || "Not chosen"
+  const driverLabel = selectedDriver?.fullName || activeSequence?.driverName || selectedDriver?.acronym || "Not chosen"
   const circuitLabel = selectedCircuit?.name || activeSequence?.circuitName || "Not chosen"
   const carLabel = selectedCar?.name || activeSequence?.carName || "Not chosen"
 
@@ -230,7 +202,7 @@ export default function RaceSequenceSetup() {
     form.customCarSetup.engineName ||
       form.customCarSetup.engineType ||
       form.customCarSetup.enginePower ||
-      activeSequence?.carSetupSnapshot?.engineName
+      activeSequence?.carSetupSnapshot?.engineName,
   )
 
   const steps = [
@@ -305,364 +277,324 @@ export default function RaceSequenceSetup() {
 
   const isSubmitting = saveSequenceMutation.isPending || initiateSequenceMutation.isPending
   const canSubmit = missing.length === 0
+  const previewPath = useMemo(() => trackPath(seedOf(selectedCircuit?.id ?? "empty")), [selectedCircuit?.id])
 
   return (
-    <div className="flex-1 bg-background">
-      {/* Page header */}
-      <div className="border-b border-border/60">
-        <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-4 py-7 sm:px-6 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">Race sequence</h1>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+    <main className="min-h-full bg-gradient-to-br from-background via-background to-primary/5 p-3 lg:p-5">
+      <div className="mx-auto max-w-[2200px] space-y-3">
+        {/* Header */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+              </span>
+              <p className="text-[11px] font-semibold tracking-widest text-green-400 uppercase">
+                Setup · {activeSequence ? "Editing active sequence" : "New draft"}
+              </p>
+              <Badge variant="outline" className="rounded border px-2 py-0.5 text-[10px] font-bold">
+                {activeSequence ? (activeSequence.status ?? "Planned") : "Draft"}
+              </Badge>
+            </div>
+            <h1 className="mt-1 font-heading text-2xl font-bold tracking-tight">Race Sequence</h1>
+            <p className="text-xs text-muted-foreground">
               Pick the driver, circuit, car and tyres once. The pit wall runs strategy from this sheet.
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="w-40" aria-hidden>
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-500"
-                  style={{ width: `${(doneCount / steps.length) * 100}%` }}
-                />
-              </div>
+            <div className="h-1.5 w-40 overflow-hidden rounded-full bg-muted/50" aria-hidden>
+              <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
             </div>
-            <span className="text-sm tabular-nums text-muted-foreground">
-              {doneCount} of {steps.length} done
+            <span className="font-mono text-xs text-muted-foreground tabular-nums">
+              {doneCount}/{steps.length} READY
             </span>
-            <Badge variant="outline" className="rounded-md px-2.5 py-1">
-              {activeSequence ? (activeSequence.status ?? "Planned") : "Draft"}
-            </Badge>
           </div>
         </div>
-      </div>
 
-      <div className="mx-auto grid max-w-[1500px] gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[168px_minmax(0,1fr)] xl:grid-cols-[168px_minmax(0,1fr)_380px]">
-        {/* Step rail */}
-        <nav aria-label="Sequence steps" className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
-          <ol className="relative space-y-1 border-l border-border/60">
-            {steps.map((step, i) => (
-              <li key={step.id}>
-                <a
-                  href={`#${step.id}`}
-                  className="group -ml-px flex items-center gap-3 border-l-2 border-transparent py-2 pl-4 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <span
-                    className={cn(
-                      "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums",
-                      step.done ? "bg-primary text-primary-foreground" : "border border-border"
-                    )}
-                  >
-                    {step.done ? <Check className="h-3 w-3" /> : i + 1}
-                  </span>
-                  {step.label}
-                </a>
-              </li>
-            ))}
-          </ol>
+        {/* Summary strip */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Session" value={getSequenceTypeLabel(sequenceType)} tone="text-primary" />
+          <Stat label="Driver" value={selectedDriver?.acronym ?? driverLabel} tone="text-cyan-400" />
+          <Stat label="Circuit" value={circuitLabel} />
+          <Stat label="Car" value={carLabel} tone="text-amber-400" />
+          <Stat label="Laps" value={lapCount || "–"} tone="text-blue-400" />
+          <Stat label="Forecast" value={forecast || "–"} />
+        </div>
+
+        {/* Step chips */}
+        <nav aria-label="Sequence steps" className="flex flex-wrap gap-1.5">
+          {steps.map((step, i) => (
+            <a
+              key={step.id}
+              href={`#${step.id}`}
+              className={cn(
+                "flex items-center gap-2 rounded-md border px-3 py-1.5 font-quicksand text-[11px] font-semibold tracking-widest uppercase transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                step.done
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border/50 text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-background/60 text-[10px] tabular-nums">
+                {step.done ? <Check className="h-2.5 w-2.5" /> : i + 1}
+              </span>
+              {step.label}
+            </a>
+          ))}
         </nav>
 
-        {/* Steps */}
-        <main className="min-w-0">
-          {activeSequence && (
-            <p className="mb-8 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-              You’re editing the current sequence ({activeSequence.circuitName ?? "no circuit"}). Saving updates it.
-            </p>
-          )}
-
-          <Section id="session" step={1} title="Session type" hint="Sets the race distance used for the suggested lap count." done={steps[0].done}>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {([RaceSequenceSaveRequestSequenceType.RACE_WEEKEND, RaceSequenceSaveRequestSequenceType.TESTING] as const).map(
-                (type) => (
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+          {/* Steps */}
+          <div className="min-w-0 space-y-3">
+            <Step id="session" title="01 · Session type" icon={<Flag className="h-3.5 w-3.5" />} done={steps[0].done}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {([RaceSequenceSaveRequestSequenceType.RACE_WEEKEND, RaceSequenceSaveRequestSequenceType.TESTING] as const).map((type) => (
                   <Option key={type} selected={sequenceType === type} onClick={() => setForm((c) => ({ ...c, sequenceType: type }))}>
-                    <p className="font-heading text-lg font-semibold">{getSequenceTypeLabel(type)}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="font-heading text-base font-semibold">{getSequenceTypeLabel(type)}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {type === RaceSequenceSaveRequestSequenceType.RACE_WEEKEND
                         ? "Full distance with qualifying, strategy and pit work."
                         : "Shorter runs for shakedowns, telemetry checks and setup tests."}
                     </p>
                   </Option>
-                )
-              )}
-            </div>
-          </Section>
+                ))}
+              </div>
+              <Hint>Sets the race distance used for the suggested lap count.</Hint>
+            </Step>
 
-          <Section id="driver" step={2} title="Driver" hint="Who is in the car for this sequence." done={steps[1].done}>
-            <OptionGrid
-              loading={driversQuery.isLoading}
-              empty={drivers.length === 0}
-              emptyText="No drivers yet. Add one under Asset Management."
-              className="sm:grid-cols-2 2xl:grid-cols-3"
-            >
-              {drivers.map((driver) => (
-                <Option
-                  key={driver.id}
-                  selected={driver.id === effectiveDriverId}
-                  onClick={() => setForm((c) => ({ ...c, driverId: driver.id }))}
-                >
-                  <div className="flex items-center gap-4">
-                    <span className="font-heading w-12 text-right text-3xl font-bold tabular-nums leading-none text-foreground/90">
-                      {driver.driverNumber ?? "–"}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        {driver.fullName || `${driver.firstName ?? ""} ${driver.lastName ?? ""}`.trim() || "Unnamed driver"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {driver.acronym ?? "---"}
-                        {driver.countryCode ? `, ${driver.countryCode}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                </Option>
-              ))}
-            </OptionGrid>
-          </Section>
-
-          <Section id="circuit" step={3} title="Circuit" hint="Lap count and the forecast start from the circuit you pick." done={steps[2].done}>
-            <OptionGrid
-              loading={circuitsQuery.isLoading}
-              empty={circuits.length === 0}
-              emptyText="No circuits yet. Add one under Asset Management."
-              className="sm:grid-cols-2"
-            >
-              {circuits.map((circuit) => {
-                const selected = circuit.id === effectiveCircuitId
-                return (
-                  <Option key={circuit.id} selected={selected} onClick={() => setForm((c) => ({ ...c, circuitId: circuit.id }))}>
-                    <div className="flex items-center gap-4">
-                      <TrackGlyph
-                        seed={seedOf(circuit.id)}
-                        className={cn("h-16 w-20 shrink-0", selected ? "text-primary" : "text-muted-foreground/60")}
-                      />
+            <Step id="driver" title="02 · Driver" icon={<Users className="h-3.5 w-3.5" />} done={steps[1].done} count={drivers.length}>
+              <OptionGrid loading={driversQuery.isLoading} empty={drivers.length === 0} emptyText="No drivers yet. Add one under Asset Management." className="sm:grid-cols-2 2xl:grid-cols-3">
+                {drivers.map((driver) => (
+                  <Option key={driver.id} selected={driver.id === effectiveDriverId} onClick={() => setForm((c) => ({ ...c, driverId: driver.id }))}>
+                    <div className="flex items-center gap-3">
+                      <span className="w-10 text-right font-heading text-2xl leading-none font-bold text-primary tabular-nums">
+                        {driver.driverNumber ?? "–"}
+                      </span>
                       <div className="min-w-0">
-                        <p className="truncate font-heading text-lg font-semibold leading-tight">
-                          {circuit.name ?? "Unnamed circuit"}
+                        <p className="truncate text-sm font-semibold">
+                          {driver.fullName || `${driver.firstName ?? ""} ${driver.lastName ?? ""}`.trim() || "Unnamed driver"}
                         </p>
-                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
-                          {[circuit.city, circuit.country].filter(Boolean).join(", ") || "Location unknown"}
-                        </p>
-                        <p className="mt-2 text-xs tabular-nums text-muted-foreground">
-                          {circuit.length ? `${circuit.length.toFixed(1)} km` : "Length pending"}
-                          {" · "}
-                          {circuit.numberOfCorners ?? "–"} corners
-                          {" · "}
-                          about {getSuggestedLapCount(circuit, sequenceType)} laps
+                        <p className="font-mono text-[11px] text-muted-foreground">
+                          {driver.acronym ?? "---"}
+                          {driver.countryCode ? ` • ${driver.countryCode}` : ""}
                         </p>
                       </div>
                     </div>
                   </Option>
-                )
-              })}
-            </OptionGrid>
+                ))}
+              </OptionGrid>
+            </Step>
 
-            {selectedCircuit && (
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <Field label="Race laps" hint={`Suggested: ${suggestedLapCount}`}>
-                  <Input
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    placeholder={String(suggestedLapCount)}
-                    value={form.customLapCount || ""}
-                    onChange={(e) => setForm((c) => ({ ...c, customLapCount: Number(e.target.value) || 0 }))}
-                    className="h-10 tabular-nums"
-                  />
-                </Field>
-                <Field label="Forecast" hint="Estimated from the circuit. Overwrite with the latest briefing.">
-                  <Input
-                    placeholder={getWeatherSnapshot(selectedCircuit, sequenceType)}
-                    value={form.weatherInfo}
-                    onChange={(e) => setForm((c) => ({ ...c, weatherInfo: e.target.value }))}
-                    className="h-10"
-                  />
-                </Field>
-              </div>
-            )}
-          </Section>
-
-          <Section id="car" step={4} title="Car" hint="The chassis that runs this sequence." done={steps[3].done}>
-            <OptionGrid
-              loading={carsQuery.isLoading}
-              empty={cars.length === 0}
-              emptyText="No cars yet. Add one under Asset Management."
-              className="sm:grid-cols-2 2xl:grid-cols-3"
-            >
-              {cars.map((car) => (
-                <Option key={car.id} selected={car.id === effectiveCarId} onClick={() => setForm((c) => ({ ...c, carId: car.id }))}>
-                  <div className="flex items-start gap-3">
-                    <Car className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{car.name ?? "Unnamed car"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        #{car.carNumber ?? "–"}
-                        {car.location ? `, ${car.location}` : ""}
-                      </p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {car.status ?? "Status unknown"}
-                        {car.inResearch ? ", in research" : ""}
-                        {car.configuration?.maxSpeed ? `, ${car.configuration.maxSpeed} km/h top speed` : ""}
-                      </p>
-                    </div>
-                  </div>
-                </Option>
-              ))}
-            </OptionGrid>
-          </Section>
-
-          <Section id="tyres" step={5} title="Tyre compounds" hint="Choose every compound the strategy may use. At least one." done={steps[4].done}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              {COMPOUND_OPTIONS.map((compound) => {
-                const selected = form.selectedCompounds.includes(compound)
-                return (
-                  <button
-                    key={compound}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => toggleCompound(compound)}
-                    className={cn(
-                      "flex flex-col items-center gap-3 rounded-xl border px-3 py-5 text-center transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-                      selected ? "border-primary bg-primary/10" : "border-border hover:border-foreground/30 hover:bg-muted/40"
-                    )}
-                  >
-                    <Tyre compound={compound} size={56} dim={!selected} />
-                    <span>
-                      <span className="block font-medium">{compound}</span>
-                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{COMPOUND_STYLE[compound].note}</span>
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </Section>
-
-          <Section
-            id="setup"
-            step={6}
-            title="Car setup"
-            hint="Optional. Start from the car’s defaults, then adjust."
-            done={steps[5].done}
-            aside={
-              <Button type="button" variant="outline" size="sm" onClick={loadCarDefaults} disabled={!selectedCar} className="gap-2">
-                <RefreshCcw className="h-3.5 w-3.5" />
-                Load car defaults
-              </Button>
-            }
-          >
-            <div className="space-y-6">
-              {SETUP_GROUPS.map((group) => (
-                <fieldset key={group.title} className="grid gap-4 sm:grid-cols-3">
-                  <legend className="mb-3 text-sm font-semibold">{group.title}</legend>
-                  {group.fields.map((f) => (
-                    <Field key={f.key} label={f.label}>
-                      <div className="relative">
-                        <Input
-                          type={f.numeric ? "number" : "text"}
-                          value={
-                            f.numeric
-                              ? form.customCarSetup[f.key] || ""
-                              : String(form.customCarSetup[f.key] ?? "")
-                          }
-                          placeholder={f.numeric ? "0" : undefined}
-                          onChange={(e) => updateSetup(f.key, f.numeric ? Number(e.target.value) || 0 : e.target.value)}
-                          className={cn("h-10", f.numeric && "tabular-nums", f.unit && "pr-14")}
-                        />
-                        {f.unit && (
-                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                            {f.unit}
-                          </span>
-                        )}
+            <Step id="circuit" title="03 · Circuit" icon={<MapPin className="h-3.5 w-3.5" />} done={steps[2].done} count={circuits.length}>
+              <OptionGrid loading={circuitsQuery.isLoading} empty={circuits.length === 0} emptyText="No circuits yet. Add one under Asset Management." className="sm:grid-cols-2">
+                {circuits.map((circuit) => {
+                  const selected = circuit.id === effectiveCircuitId
+                  return (
+                    <Option key={circuit.id} selected={selected} onClick={() => setForm((c) => ({ ...c, circuitId: circuit.id }))}>
+                      <div className="flex items-center gap-3">
+                        <TrackGlyph seed={seedOf(circuit.id)} className={cn("h-14 w-[4.5rem] shrink-0", selected ? "text-primary" : "text-muted-foreground/60")} />
+                        <div className="min-w-0">
+                          <p className="truncate font-heading text-base leading-tight font-semibold">{circuit.name ?? "Unnamed circuit"}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {[circuit.city, circuit.country].filter(Boolean).join(", ") || "Location unknown"}
+                          </p>
+                          <p className="mt-1.5 font-mono text-[11px] text-muted-foreground tabular-nums">
+                            {circuit.length ? `${circuit.length.toFixed(1)} km` : "– km"} · {circuit.numberOfCorners ?? "–"} T · ~{getSuggestedLapCount(circuit, sequenceType)} laps
+                          </p>
+                        </div>
                       </div>
-                    </Field>
-                  ))}
-                </fieldset>
-              ))}
-            </div>
-          </Section>
-        </main>
+                    </Option>
+                  )
+                })}
+              </OptionGrid>
 
-        {/* Briefing */}
-        <aside className="lg:col-span-2 xl:col-span-1 xl:sticky xl:top-20 xl:self-start">
-          <div className="overflow-hidden rounded-2xl border border-border bg-card">
-            <div className="relative border-b border-border/60 bg-gradient-to-b from-primary/10 to-transparent px-6 pb-5 pt-6">
-              <p className="text-sm text-muted-foreground">{getSequenceTypeLabel(sequenceType)}</p>
-              <p className="mt-1 font-heading text-2xl font-semibold leading-tight">{circuitLabel}</p>
-              <TrackGlyph
-                seed={seedOf(selectedCircuit?.id ?? "empty")}
-                className={cn("mt-4 h-32 w-full", selectedCircuit ? "text-primary" : "text-muted-foreground/30")}
-                thick
-              />
-            </div>
+              {selectedCircuit && (
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <Field label="Race laps" hint={`Suggested: ${suggestedLapCount}`}>
+                    <Input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      placeholder={String(suggestedLapCount)}
+                      value={form.customLapCount || ""}
+                      onChange={(e) => setForm((c) => ({ ...c, customLapCount: Number(e.target.value) || 0 }))}
+                      className="h-9 font-mono tabular-nums"
+                    />
+                  </Field>
+                  <Field label="Forecast" hint="Estimated from the circuit. Overwrite with the latest briefing.">
+                    <Input
+                      placeholder={getWeatherSnapshot(selectedCircuit, sequenceType)}
+                      value={form.weatherInfo}
+                      onChange={(e) => setForm((c) => ({ ...c, weatherInfo: e.target.value }))}
+                      className="h-9"
+                    />
+                  </Field>
+                </div>
+              )}
+            </Step>
 
-            <dl className="divide-y divide-border/60 text-sm">
-              <BriefRow label="Driver">
-                <span className="flex items-baseline gap-2">
-                  {selectedDriver?.driverNumber != null && (
-                    <span className="font-heading text-lg font-bold tabular-nums">{selectedDriver.driverNumber}</span>
-                  )}
-                  {driverLabel}
-                </span>
-              </BriefRow>
-              <BriefRow label="Car">{carLabel}</BriefRow>
-              <BriefRow label="Tyres">
-                <span className="flex gap-1.5">
-                  {form.selectedCompounds.map((c) => (
-                    <Tyre key={c} compound={c as Compound} size={26} />
-                  ))}
-                </span>
-              </BriefRow>
-              <BriefRow label="Laps">
-                <span className="tabular-nums">{lapCount || "–"}</span>
-              </BriefRow>
-              <BriefRow label="Forecast">{forecast || "Pick a circuit"}</BriefRow>
-            </dl>
+            <Step id="car" title="04 · Car" icon={<Car className="h-3.5 w-3.5" />} done={steps[3].done} count={cars.length}>
+              <OptionGrid loading={carsQuery.isLoading} empty={cars.length === 0} emptyText="No cars yet. Add one under Asset Management." className="sm:grid-cols-2 2xl:grid-cols-3">
+                {cars.map((car) => (
+                  <Option key={car.id} selected={car.id === effectiveCarId} onClick={() => setForm((c) => ({ ...c, carId: car.id }))}>
+                    <div className="flex items-start gap-3">
+                      <Car className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{car.name ?? "Unnamed car"}</p>
+                        <p className="font-mono text-[11px] text-muted-foreground">
+                          #{car.carNumber ?? "–"}
+                          {car.location ? ` • ${car.location}` : ""}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          {car.status ?? "Status unknown"}
+                          {car.inResearch ? ", in research" : ""}
+                          {car.configuration?.maxSpeed ? `, ${car.configuration.maxSpeed} km/h top speed` : ""}
+                        </p>
+                      </div>
+                    </div>
+                  </Option>
+                ))}
+              </OptionGrid>
+            </Step>
 
-            <div className="space-y-3 border-t border-border/60 p-5">
-              <p className="text-sm text-muted-foreground">
-                {canSubmit ? "Everything required is set." : `Still needed: ${missing.join(", ")}.`}
-              </p>
-              <Button
-                type="button"
-                size="lg"
-                className="h-11 w-full gap-2"
-                onClick={initiateSequence}
-                disabled={!canSubmit || isSubmitting}
-              >
-                {initiateSequenceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Initiate sequence
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 w-full gap-2"
-                onClick={saveDraft}
-                disabled={!canSubmit || isSubmitting}
-              >
-                {saveSequenceMutation.isPending && !initiateSequenceMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save draft
-              </Button>
-
-              <div aria-live="polite">
-                {feedback && (
-                  <p className="flex items-start gap-2 rounded-lg bg-green-500/10 px-3 py-2.5 text-sm text-green-600 dark:text-green-400">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                    {feedback}
-                  </p>
-                )}
-                {error && (
-                  <p role="alert" className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-                    {error}
-                  </p>
-                )}
+            <Step id="tyres" title="05 · Tyre compounds" icon={<CircleDot className="h-3.5 w-3.5" />} done={steps[4].done} count={form.selectedCompounds.length}>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                {COMPOUND_OPTIONS.map((compound) => {
+                  const selected = form.selectedCompounds.includes(compound)
+                  return (
+                    <button
+                      key={compound}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleCompound(compound)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 rounded-lg border px-3 py-4 text-center transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+                        selected ? "border-primary bg-primary/15 ring-1 ring-primary/40" : "border-border/50 bg-muted/20 hover:bg-muted/50",
+                      )}
+                    >
+                      <Tyre compound={compound} size={48} dim={!selected} />
+                      <span>
+                        <span className="block text-sm font-semibold">{compound}</span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{COMPOUND_NOTE[compound]}</span>
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
-            </div>
+              <Hint>Choose every compound the strategy may use. At least one.</Hint>
+            </Step>
+
+            <Step
+              id="setup"
+              title="06 · Car setup (optional)"
+              icon={<Wrench className="h-3.5 w-3.5" />}
+              done={steps[5].done}
+              aside={
+                <Button type="button" variant="outline" size="sm" onClick={loadCarDefaults} disabled={!selectedCar} className="h-7 gap-1.5 text-xs">
+                  <RefreshCcw className="h-3 w-3" />
+                  Load car defaults
+                </Button>
+              }
+            >
+              <div className="space-y-4">
+                {SETUP_GROUPS.map((group) => (
+                  <fieldset key={group.title} className="grid gap-3 sm:grid-cols-3">
+                    <legend className="mb-2 font-quicksand text-[11px] font-bold tracking-widest text-muted-foreground uppercase">{group.title}</legend>
+                    {group.fields.map((f) => (
+                      <Field key={f.key} label={f.label}>
+                        <div className="relative">
+                          <Input
+                            type={f.numeric ? "number" : "text"}
+                            value={f.numeric ? form.customCarSetup[f.key] || "" : String(form.customCarSetup[f.key] ?? "")}
+                            placeholder={f.numeric ? "0" : undefined}
+                            onChange={(e) => updateSetup(f.key, f.numeric ? Number(e.target.value) || 0 : e.target.value)}
+                            className={cn("h-9", f.numeric && "font-mono tabular-nums", f.unit && "pr-14")}
+                          />
+                          {f.unit && (
+                            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[10px] text-muted-foreground">{f.unit}</span>
+                          )}
+                        </div>
+                      </Field>
+                    ))}
+                  </fieldset>
+                ))}
+              </div>
+            </Step>
           </div>
-        </aside>
+
+          {/* Briefing */}
+          <aside className="xl:sticky xl:top-20 xl:self-start">
+            <Panel title="Sequence Briefing" icon={<Flag className="h-3.5 w-3.5" />} right={<span className="font-mono text-[10px] text-muted-foreground">{getSequenceTypeLabel(sequenceType).toUpperCase()}</span>}>
+              <div className="-m-3">
+                <div className="border-b border-border/40 bg-gradient-to-b from-primary/10 to-transparent px-4 pt-4 pb-2">
+                  <p className="truncate font-heading text-xl leading-tight font-semibold">{circuitLabel}</p>
+                  <svg viewBox="0 0 100 100" fill="none" className={cn("mt-2 h-40 w-full", selectedCircuit ? "text-primary" : "text-muted-foreground/30")} aria-hidden>
+                    <path d={previewPath} stroke="currentColor" strokeOpacity={0.12} strokeWidth={9} strokeLinejoin="round" />
+                    <path d={previewPath} stroke="currentColor" strokeOpacity={0.6} strokeWidth={1.8} strokeLinejoin="round" />
+                    {selectedCircuit && (
+                      <circle r={3.2} fill="currentColor">
+                        <animateMotion dur="8s" repeatCount="indefinite" path={previewPath} />
+                      </circle>
+                    )}
+                  </svg>
+                </div>
+
+                <dl className="divide-y divide-border/40 text-sm">
+                  <BriefRow label="Driver">
+                    <span className="flex items-baseline gap-2">
+                      {selectedDriver?.driverNumber != null && (
+                        <span className="font-heading text-base font-bold text-primary tabular-nums">{selectedDriver.driverNumber}</span>
+                      )}
+                      {driverLabel}
+                    </span>
+                  </BriefRow>
+                  <BriefRow label="Car">{carLabel}</BriefRow>
+                  <BriefRow label="Tyres">
+                    <span className="flex gap-1.5">
+                      {form.selectedCompounds.map((c) => (
+                        <Tyre key={c} compound={c} size={24} />
+                      ))}
+                    </span>
+                  </BriefRow>
+                  <BriefRow label="Laps">
+                    <span className="font-mono tabular-nums">{lapCount || "–"}</span>
+                  </BriefRow>
+                  <BriefRow label="Forecast">{forecast || "Pick a circuit"}</BriefRow>
+                </dl>
+
+                <div className="space-y-2.5 border-t border-border/40 p-4">
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    {canSubmit ? "ALL REQUIRED INPUTS SET" : `STILL NEEDED: ${missing.join(", ").toUpperCase()}`}
+                  </p>
+                  <Button type="button" size="lg" className="h-10 w-full gap-2" onClick={initiateSequence} disabled={!canSubmit || isSubmitting}>
+                    {initiateSequenceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                    Initiate sequence
+                  </Button>
+                  <Button type="button" variant="outline" className="h-9 w-full gap-2" onClick={saveDraft} disabled={!canSubmit || isSubmitting}>
+                    {saveSequenceMutation.isPending && !initiateSequenceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save draft
+                  </Button>
+
+                  <div aria-live="polite" className="space-y-2">
+                    {feedback && (
+                      <p className="flex items-start gap-2 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                        {feedback}
+                      </p>
+                    )}
+                    {error && (
+                      <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {error}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Panel>
+          </aside>
+        </div>
       </div>
-    </div>
+    </main>
   )
 }
 
@@ -670,45 +602,61 @@ export default function RaceSequenceSetup() {
 /*  Building blocks                                                           */
 /* -------------------------------------------------------------------------- */
 
-function Section({
+function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border/40 bg-muted/20 px-2.5 py-2">
+      <p className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">{label}</p>
+      <p className={cn("truncate font-mono text-sm font-bold tabular-nums", tone)}>{value}</p>
+    </div>
+  )
+}
+
+function Step({
   id,
-  step,
   title,
-  hint,
+  icon,
   done,
+  count,
   aside,
   children,
 }: {
   id: string
-  step: number
   title: string
-  hint: string
+  icon: ReactNode
   done: boolean
+  count?: number
   aside?: ReactNode
   children: ReactNode
 }) {
   return (
-    <section id={id} className="scroll-mt-20 border-t border-border/60 py-9 first:border-t-0 first:pt-0">
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="flex gap-3">
-          <span
-            className={cn(
-              "mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
-              done ? "bg-primary text-primary-foreground" : "border border-border text-muted-foreground"
-            )}
-          >
-            {done ? <Check className="h-3.5 w-3.5" /> : step}
+    <div id={id} className="scroll-mt-20">
+      <Panel
+        title={title}
+        icon={icon}
+        right={
+          <span className="flex items-center gap-2">
+            {aside}
+            {count != null && <span className="font-mono text-[10px] text-muted-foreground">{count}</span>}
+            <span
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full",
+                done ? "bg-primary text-primary-foreground" : "border border-border/60 text-transparent",
+              )}
+              aria-label={done ? "Step complete" : "Step incomplete"}
+            >
+              <Check className="h-3 w-3" />
+            </span>
           </span>
-          <div>
-            <h2 className="font-heading text-xl font-semibold">{title}</h2>
-            <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{hint}</p>
-          </div>
-        </div>
-        {aside}
-      </header>
-      <div className="md:pl-10">{children}</div>
-    </section>
+        }
+      >
+        {children}
+      </Panel>
+    </div>
   )
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <p className="mt-3 text-[11px] text-muted-foreground">{children}</p>
 }
 
 function Option({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
@@ -718,13 +666,13 @@ function Option({ selected, onClick, children }: { selected: boolean; onClick: (
       aria-pressed={selected}
       onClick={onClick}
       className={cn(
-        "relative w-full rounded-xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
-        selected ? "border-primary bg-primary/10" : "border-border hover:border-foreground/30 hover:bg-muted/40"
+        "relative w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring",
+        selected ? "border-primary bg-primary/15 ring-1 ring-primary/40" : "border-border/50 bg-muted/20 hover:bg-muted/50",
       )}
     >
       {selected && (
-        <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Check className="h-3 w-3" />
+        <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-2.5 w-2.5" />
         </span>
       )}
       {children}
@@ -747,67 +695,36 @@ function OptionGrid({
 }) {
   if (loading) {
     return (
-      <div className={cn("grid gap-3", className)}>
+      <div className={cn("grid gap-2", className)}>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-20 animate-pulse rounded-xl bg-muted/50" />
+          <div key={i} className="h-16 animate-pulse rounded-lg bg-muted/30" />
         ))}
       </div>
     )
   }
   if (empty) {
     return (
-      <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-        {emptyText}
-      </p>
+      <p className="rounded-lg border border-dashed border-border/40 px-4 py-8 text-center text-xs text-muted-foreground">{emptyText}</p>
     )
   }
-  return <div className={cn("grid gap-3", className)}>{children}</div>
+  return <div className={cn("grid max-h-[26rem] gap-2 overflow-y-auto pr-1", className)}>{children}</div>
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <label className="grid content-start gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
+    <label className="grid content-start gap-1.5">
+      <span className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">{label}</span>
       {children}
-      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      {hint && <span className="text-[11px] text-muted-foreground">{hint}</span>}
     </label>
   )
 }
 
 function BriefRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-6 py-3.5">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-right font-medium">{children}</dd>
+    <div className="flex items-center justify-between gap-4 px-4 py-2.5">
+      <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">{label}</dt>
+      <dd className="min-w-0 truncate text-right text-sm font-medium">{children}</dd>
     </div>
-  )
-}
-
-/** Tyre drawn the way pit crews read it: coloured sidewall ring, dark tread. */
-function Tyre({ compound, size = 44, dim = false }: { compound: Compound; size?: number; dim?: boolean }) {
-  const s = COMPOUND_STYLE[compound]
-  return (
-    <span
-      role="img"
-      aria-label={`${compound} tyre`}
-      style={{ width: size, height: size, borderWidth: Math.max(3, Math.round(size * 0.14)), fontSize: size * 0.34 }}
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full bg-zinc-950 font-bold text-zinc-100 transition-opacity",
-        s.ring,
-        dim && "opacity-45"
-      )}
-    >
-      {s.letter}
-    </span>
-  )
-}
-
-function TrackGlyph({ seed, className, thick = false }: { seed: number; className?: string; thick?: boolean }) {
-  const d = useMemo(() => trackPath(seed), [seed])
-  return (
-    <svg viewBox="0 0 100 100" className={className} fill="none" aria-hidden>
-      <path d={d} stroke="currentColor" strokeOpacity={0.25} strokeWidth={thick ? 9 : 8} strokeLinejoin="round" />
-      <path d={d} stroke="currentColor" strokeWidth={thick ? 2.5 : 3} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
   )
 }
