@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import {
   Check,
-  Disc,
   Radio,
   Volume2,
   VolumeX,
@@ -11,6 +10,7 @@ import {
   Zap,
 } from "lucide-react"
 import { usePitCrewLive } from "@/hooks/use-pit-crew-live"
+import { normalizeCompound, Tyre } from "@/components/race-sequence-management/visuals"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -122,22 +122,26 @@ export default function PitCrewLivePage() {
     }
   }, [isBoxNow, audioEnabled])
 
+  // Accepts SOFT / Soft / S, INTER / Intermediate / I, etc.
   const getCompoundColors = (compound?: string | null) => {
-    switch (compound?.toUpperCase()) {
-      case "SOFT":
+    switch (normalizeCompound(compound)) {
+      case "soft":
         return "border-red-500 text-red-500 bg-red-500/10 shadow-[0_0_40px_rgba(239,68,68,0.25)]"
-      case "MEDIUM":
+      case "medium":
         return "border-yellow-400 text-yellow-400 bg-yellow-400/10 shadow-[0_0_40px_rgba(250,204,21,0.25)]"
-      case "HARD":
+      case "hard":
         return "border-white text-white bg-white/10 shadow-[0_0_40px_rgba(255,255,255,0.25)]"
-      case "INTER":
+      case "intermediate":
         return "border-emerald-400 text-emerald-400 bg-emerald-400/10 shadow-[0_0_40px_rgba(52,211,153,0.25)]"
-      case "WET":
+      case "wet":
         return "border-blue-500 text-blue-500 bg-blue-500/10 shadow-[0_0_40px_rgba(59,130,246,0.25)]"
       default:
         return "border-zinc-700 text-zinc-400 bg-zinc-900/60"
     }
   }
+
+  const weatherCompound = strategy?.meta?.weather_intel?.recommended_compound
+  const weatherHasImage = normalizeCompound(weatherCompound) !== null
 
   return (
     <div
@@ -262,12 +266,19 @@ export default function PitCrewLivePage() {
               {strategy?.target_compound && (
                 <div
                   className={cn(
-                    "flex flex-col items-center justify-center rounded-2xl border-2 px-8 py-6",
+                    "flex min-w-64 flex-col items-center justify-center rounded-2xl border-2 px-8 py-6",
                     getCompoundColors(strategy.target_compound)
                   )}
                 >
-                  <Disc className="h-10 w-10 animate-spin" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest mt-2">
+                  <Tyre
+                    compound={strategy.target_compound}
+                    size={140}
+                    className={cn(
+                      "drop-shadow-[0_0_24px_currentColor]",
+                      isBoxNow && " motion-reduce:animate-none"
+                    )}
+                  />
+                  <span className="mt-3 text-[10px] font-bold uppercase tracking-widest">
                     FITTED COMPOUND
                   </span>
                   <span className="text-4xl sm:text-5xl font-black tracking-widest">
@@ -292,6 +303,16 @@ export default function PitCrewLivePage() {
             </span>
 
             <div className="space-y-3 pt-2">
+              {strategy?.target_compound && (
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <span className="text-xs text-zinc-400">NEXT SET</span>
+                  <span className="flex items-center gap-2 font-bold">
+                    <Tyre compound={strategy.target_compound} size={36} />
+                    {strategy.target_compound}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between border-b border-white/5 pb-2">
                 <span className="text-xs text-zinc-400">DEGRADATION REGIME</span>
                 <span className="font-bold text-amber-400">
@@ -315,8 +336,9 @@ export default function PitCrewLivePage() {
 
               <div className="flex items-center justify-between">
                 <span className="text-xs text-zinc-400">WEATHER COND.</span>
-                <span className="font-bold text-emerald-400">
-                  {strategy?.meta?.weather_intel?.recommended_compound ?? "SLICK (DRY)"}
+                <span className="flex items-center gap-2 font-bold text-emerald-400">
+                  {weatherHasImage && weatherCompound && <Tyre compound={weatherCompound} size={28} />}
+                  {weatherCompound ?? "SLICK (DRY)"}
                 </span>
               </div>
             </div>

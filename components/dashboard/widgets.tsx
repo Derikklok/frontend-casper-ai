@@ -15,17 +15,13 @@ import {
 } from "recharts"
 import { Fuel, Gauge, MessageSquare, Thermometer, Timer, Wind, Zap, CloudRain, Flag as FlagIcon, Users } from "lucide-react"
 
+import { CompoundBadge, Tyre } from "@/components/race-sequence-management/visuals"
 import { cn } from "@/lib/utils"
 import type { Compound, LapPoint, RadioMsg, SectorState, Telemetry, TowerRow, TracePoint } from "./use-live-telemetry"
 
 /* ------------------------------------------------------------------ */
 /* Shared                                                              */
 /* ------------------------------------------------------------------ */
-export const COMPOUND_STYLE: Record<Compound, string> = {
-  S: "border-red-500 text-red-400",
-  M: "border-yellow-400 text-yellow-300",
-  H: "border-zinc-300 text-zinc-200",
-}
 const SECTOR_STYLE: Record<SectorState, string> = {
   purple: "bg-purple-500/20 text-purple-300 border-purple-500/40",
   green: "bg-green-500/20 text-green-300 border-green-500/40",
@@ -70,12 +66,8 @@ function Bar({ value, tone, max = 100 }: { value: number; tone: string; max?: nu
   )
 }
 
-function CompoundDot({ c, size = "h-5 w-5" }: { c: Compound; size?: string }) {
-  return (
-    <span className={cn("inline-flex items-center justify-center rounded-full border-2 text-[10px] font-black", size, COMPOUND_STYLE[c])}>
-      {c}
-    </span>
-  )
+function CompoundDot({ c, size = 28 }: { c: Compound; size?: number }) {
+  return <Tyre compound={c} size={size} />
 }
 
 /* ------------------------------------------------------------------ */
@@ -126,7 +118,7 @@ export function TimingTower({ rows }: { rows: TowerRow[] }) {
             <span className={cn("font-bold", r.us && "text-primary")}>{r.acronym}</span>
             <span className="text-right tabular-nums">{r.pos === 1 ? "LEADER" : `+${r.gap.toFixed(3)}`}</span>
             <span className="flex items-center justify-center gap-1">
-              <CompoundDot c={r.compound} size="h-4 w-4" />
+              <CompoundDot c={r.compound} size={22} />
               <span className="text-[10px] text-muted-foreground">{r.age}</span>
             </span>
             <span className="text-right text-muted-foreground tabular-nums">{r.pos === 1 ? "–" : r.interval.toFixed(3)}</span>
@@ -308,7 +300,14 @@ const wearTone = (v: number) => (v > 75 ? "bg-red-500" : v > 50 ? "bg-amber-400"
 export function Tyres({ t }: { t: Telemetry }) {
   return (
     <Panel title="Tyres" icon={<Thermometer className="h-3.5 w-3.5" />}
-      right={<span className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground"><CompoundDot c={t.tyre.compound} />{t.tyre.age} LAPS</span>}>
+      right={<span className="font-mono text-[10px] text-muted-foreground">{t.tyre.age} LAPS</span>}>
+      <CompoundBadge
+        compound={t.tyre.compound}
+        size={56}
+        prefix="Fitted"
+        suffix={`${t.tyre.age} laps · avg ${(t.tyre.wear.reduce((a, b) => a + b, 0) / 4).toFixed(0)}% worn`}
+        className="mb-2"
+      />
       <div className="grid grid-cols-2 gap-2">
         {CORNERS.map((c, i) => (
           <div key={c} className="rounded-lg border border-border/40 bg-muted/20 p-2">
@@ -377,6 +376,15 @@ export function Strategy({ t }: { t: Telemetry }) {
           PIT WINDOW {t.pit.open ? "OPEN" : `L${t.pit.opens}`}
         </span>
       }>
+      {t.pit.open && t.strategy[1] && (
+        <CompoundBadge
+          compound={t.strategy[1].next}
+          size={52}
+          prefix={`Pit window open · box L${t.pit.recommended}`}
+          suffix="Next set to fit"
+          className="mb-3 animate-pulse border-green-500/50 bg-green-500/10"
+        />
+      )}
       <p className="mb-2 font-mono text-[10px] text-muted-foreground">Window L{t.pit.opens}–L{t.pit.closes} · recommended L{t.pit.recommended}</p>
       <div className="space-y-2">
         {t.strategy.map((s) => (
@@ -385,7 +393,8 @@ export function Strategy({ t }: { t: Telemetry }) {
               <span className="text-xs font-bold">{s.name}</span>
               <span className="flex items-center gap-1.5 font-mono text-xs">
                 <span className="text-muted-foreground">L{s.pitLap}</span>
-                <CompoundDot c={s.next} size="h-4 w-4" />
+                <CompoundDot c={s.next} size={26} />
+                <span className="text-[10px] font-bold tracking-wider text-muted-foreground">{s.next === "S" ? "SOFT" : s.next === "M" ? "MED" : "HARD"}</span>
                 <span className={s.delta <= 0 ? "text-green-400" : "text-red-400"}>{s.delta > 0 ? "+" : ""}{s.delta.toFixed(2)}s</span>
               </span>
             </div>
