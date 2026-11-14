@@ -33,7 +33,7 @@ export function normalizeCompound(value?: string | null): CompoundKey | null {
 }
 
 /** Compound picture from /public. Falls back to a lettered ring for unknown values. */
-export function Tyre({ compound, size = 44, dim = false, className }: { compound: string; size?: number; dim?: boolean; className?: string }) {
+export function Tyre({ compound, size = 44, dim = false, className }: { compound?: string | null; size?: number; dim?: boolean; className?: string }) {
   const key = normalizeCompound(compound)
 
   if (!key) {
@@ -44,7 +44,7 @@ export function Tyre({ compound, size = 44, dim = false, className }: { compound
         style={{ width: size, height: size, fontSize: size * 0.34 }}
         className={cn("inline-flex shrink-0 items-center justify-center rounded-full border-2 border-zinc-500 bg-zinc-950 font-bold text-zinc-100", dim && "opacity-45", className)}
       >
-        {compound.charAt(0).toUpperCase() || "?"}
+        {compound?.charAt(0).toUpperCase() || "?"}
       </span>
     )
   }
